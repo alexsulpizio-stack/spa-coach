@@ -1,6 +1,6 @@
 {
-  "versionCode": 50,
-  "versionName": "0.5.0",
-  "apkUrl": "https://github.com/alexsulpizio-stack/spa-coach/releases/download/v0.5.0/Spa-Coach-v0.5.0-debug.apk",
-  "notes": "Spa Coach v0.5 with onboarding, inventory, maintenance reminders, and OTA-ready hosting."
+  "versionCode": 52,
+  "versionName": "0.5.2",
+  "apkUrl": "https://github.com/alexsulpizio-stack/spa-coach/releases/download/v0.5.2/Spa-Coach-v0.5.2-debug.apk",
+  "notes": "The displayed app version now comes directly from Android, preventing stale version labels."
 }
