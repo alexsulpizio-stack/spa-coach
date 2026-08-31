@@ -52,11 +52,11 @@ test('high chlorine uses a conservative half neutralizer dose', () => {
   assert.match(plan.dose, /0\.18 oz/);
 });
 
-test('pH correction uses configured inventory dose', () => {
+test('pH correction retains conservative incremental dosing', () => {
   const plan = treatmentPlan({ freeChlorine: 5, ph: 8.2 }, 290, inventory);
   assert.equal(plan.focus, 'pH');
-  assert.equal(plan.product, 'Test pH Down');
-  assert.match(plan.dose, /0\.29 oz/);
+  assert.equal(plan.product, 'SpaChoice pH Decreaser');
+  assert.match(plan.dose, /0\.5 oz/);
 });
 
 test('unresolved issues retain sanitizer-first priority', () => {

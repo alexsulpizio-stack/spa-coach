@@ -60,7 +60,6 @@ function treatmentPlan(readings, gallons, inventory = []) {
   const sanitizerDose = (inventoryDose(inventory, 'sanitizer', 0.5) * scale).toFixed(2);
   const phUpDose = (inventoryDose(inventory, 'raise', 1) * scale).toFixed(2);
   const phUpLowDose = (inventoryDose(inventory, 'raise', 1) * 2 * scale).toFixed(2);
-  const phDownDose = (inventoryDose(inventory, 'lower', 0.5) * scale).toFixed(2);
 
   if (Number.isFinite(freeChlorine) && freeChlorine > 10) {
     const reduction = Math.max(0, freeChlorine - 5);
@@ -87,8 +86,8 @@ function treatmentPlan(readings, gallons, inventory = []) {
   if (Number.isFinite(ph) && ph > 7.8) return {
     action: 'dose', focus: 'pH', followUpTitle: 'Retest pH and alkalinity', retestMinutes: 30,
     title: 'Lower pH', explanation: `pH is ${ph}, above the desired range.`,
-    product: inventoryName(inventory, 'lower', 'SpaChoice pH Decreaser'), dose: `Label-scaled starting dose for ${gallons} gal: about ${phDownDose} oz`,
-    steps: ['Turn on the blower or filter.', `Premix ${phDownDose} oz of product with water in a plastic pail.`, 'Add the diluted product to the spa.', 'Wait 30 minutes and retest.', 'Do not exceed the product label’s maximum one-time dose.'],
+    product: 'SpaChoice pH Decreaser', dose: 'Start with 0.5 oz, per the bottle’s incremental-dose directions',
+    steps: ['Turn on the blower or filter.', 'Premix 0.5 oz of product with water in a plastic pail.', 'Add the diluted product to the spa.', 'Wait 30 minutes and retest.', 'Do not exceed 1 oz at one time.'],
     note: 'This product can also lower total alkalinity, so retest both before another dose.'
   };
   if (Number.isFinite(ph) && ph < 7.2) {
