@@ -23,12 +23,22 @@ test('learned calibration is considered without bypassing confidence output',()=
 });
 
 test('vertical six-pad geometry is detected from a deterministic mask',()=>{
-  const width=120,height=360,mask=new Uint8Array(width*height);
-  for(const center of [40,92,144,196,248,300]){
-    for(let y=center-10;y<=center+10;y++)for(let x=50;x<=70;x++)mask[y*width+x]=1;
+  const width=45,height=180,mask=new Uint8Array(width*height);
+  for(const center of [15,45,75,105,135,165]){
+    for(let y=center-4;y<=center+4;y++)for(let x=18;x<=28;x++)mask[y*width+x]=1;
   }
   const result=detectPadsAlongAxis(mask,width,height,'vertical');
   assert.equal(result?.points.length,6);
   assert.equal(result?.orientation,'vertical');
   assert.ok(['high','medium'].includes(result?.confidence));
+});
+
+test('noisy geometry search has a strict combination budget',()=>{
+  const width=45,height=180,mask=new Uint8Array(width*height);
+  for(const center of Array.from({length:14},(_,index)=>8+index*12)){
+    for(let y=center-2;y<=center+2;y++)for(let x=18;x<=28;x++)mask[y*width+x]=1;
+  }
+  const result=detectPadsAlongAxis(mask,width,height,'vertical');
+  assert.equal(result?.points.length,6);
+  assert.ok(result.searchEvaluations<=250);
 });

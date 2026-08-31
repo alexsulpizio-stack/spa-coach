@@ -128,7 +128,7 @@ function detectPadsAlongAxis(mask,width,height,orientation) {
     for(let j=Math.max(0,i-halfWindow);j<=Math.min(minorLength-1,i+halfWindow);j++)sum+=counts[j];
     if(sum>bestSmooth){bestSmooth=sum;bestMinor=i;}
   }
-  if(bestMinor<0)return null;
+  if(bestMinor<0||bestSmooth<=0)return null;
   const bandHalf=Math.max(7,Math.round(minorLength*.027)),bandStart=Math.max(0,bestMinor-bandHalf),bandEnd=Math.min(minorLength-1,bestMinor+bandHalf);
   const fractions=new Float32Array(majorLength),bandWidth=bandEnd-bandStart+1;
   for(let major=0;major<majorLength;major++){
@@ -147,7 +147,7 @@ function detectPadsAlongAxis(mask,width,height,orientation) {
   }
   const merged=[];
   runs.forEach(run=>{
-    const previous=merged.at(-1);
+    const previous=merged[merged.length-1];
     if(previous&&run.start-previous.end-1<=2){
       const firstSize=previous.end-previous.start+1,secondSize=run.end-run.start+1;
       previous.coverage=(previous.coverage*firstSize+run.coverage*secondSize)/(firstSize+secondSize);
@@ -157,10 +157,15 @@ function detectPadsAlongAxis(mask,width,height,orientation) {
   const minimumRun=Math.max(3,Math.round(majorLength*.008)),maximumRun=Math.max(minimumRun+1,Math.round(majorLength*.12));
   let filtered=merged.filter(run=>run.end-run.start+1>=minimumRun&&run.end-run.start+1<=maximumRun);
   if(filtered.length<6)return null;
-  if(filtered.length>14)filtered=[...filtered].sort((a,b)=>b.coverage*(b.end-b.start+1)-a.coverage*(a.end-a.start+1)).slice(0,14).sort((a,b)=>a.start-b.start);
+  // Noisy backgrounds can create dozens of candidate color bands. Keep only
+  // the strongest ten so the six-pad combination search stays strictly bounded.
+  if(filtered.length>10)filtered=[...filtered].sort((a,b)=>b.coverage*(b.end-b.start+1)-a.coverage*(a.end-a.start+1)).slice(0,10).sort((a,b)=>a.start-b.start);
   let best=null;
+  let searchEvaluations=0;
   const choose=(start,chosen)=>{
+    if(searchEvaluations>=250)return;
     if(chosen.length===6){
+      searchEvaluations++;
       const centers=chosen.map(run=>(run.start+run.end)/2),gaps=centers.slice(1).map((center,i)=>center-centers[i]);
       const mean=gaps.reduce((a,b)=>a+b,0)/gaps.length;
       if(mean<majorLength*.025||mean>majorLength*.22)return;
@@ -178,7 +183,7 @@ function detectPadsAlongAxis(mask,width,height,orientation) {
   choose(0,[]);
   if(!best)return null;
   const points=best.chosen.map(run=>(run.start+run.end)/2).map(center=>vertical?{x:bestMinor,y:center}:{x:center,y:bestMinor});
-  return {...best,points,orientation,confidence:best.cv<.25&&best.coverage>.48&&best.extreme<1.8?'high':'medium'};
+  return {...best,points,orientation,searchEvaluations,confidence:best.cv<.25&&best.coverage>.48&&best.extreme<1.8?'high':'medium'};
 }
 
 globalThis.SpaScanner=Object.freeze({PAD_ORDER,REFERENCES,WET_PROTOTYPES,colorCandidate,detectPadsAlongAxis,matchColor,rgbToLab});
