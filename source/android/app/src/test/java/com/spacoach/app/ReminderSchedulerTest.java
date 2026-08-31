@@ -15,9 +15,11 @@ import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
 import org.robolectric.Shadows;
+import org.robolectric.annotation.Config;
 import org.robolectric.shadows.ShadowAlarmManager;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(sdk = 35)
 public class ReminderSchedulerTest {
     @Test
     public void stableIdsAreUnique() {

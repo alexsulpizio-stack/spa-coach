@@ -6,6 +6,7 @@ import org.json.JSONObject;
 import org.junit.Test;
 import org.junit.runner.RunWith;
 import org.robolectric.RobolectricTestRunner;
+import org.robolectric.annotation.Config;
 
 import java.nio.charset.StandardCharsets;
 import java.security.KeyPair;
@@ -14,6 +15,7 @@ import java.security.Signature;
 import java.util.Base64;
 
 @RunWith(RobolectricTestRunner.class)
+@Config(sdk = 35)
 public class UpdateSecurityTest {
     @Test
     public void signedManifestPassesAndTamperingFails() throws Exception {
