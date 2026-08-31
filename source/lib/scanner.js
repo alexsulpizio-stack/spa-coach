@@ -254,7 +254,7 @@ function samplePatchFromPixels(data,width,height,x,y) {
         const rgb=[data[i],data[i+1],data[i+2]];
         all.push(rgb);
         const maximum=Math.max(...rgb),minimum=Math.min(...rgb);
-        if(maximum-minimum>8&&maximum<250&&minimum>10)colors.push(rgb);
+        if(maximum-minimum>18&&maximum<250&&minimum>10)colors.push(rgb);
       }
     }
     const use=colors.length>=20?colors:all;
@@ -338,7 +338,7 @@ function buildPadReadings(sampled, learnedCalibrations=[], options={}) {
       innerHueSpread:sample.innerHueSpread,innerSatSpread:sample.innerSatSpread,outerHueSpread:sample.outerHueSpread};
     const centerIsMottled=sample.innerHueSpread>30&&sample.innerSatSpread>.2&&sample.innerSpread>55;
     const tcIsMottled=pad.key==='totalChlorine'&&(
-      sample.innerHueSpread>8||sample.innerSatSpread>.16||sample.innerSpread>34||sample.outerMedianSpread>30
+      sample.innerHueSpread>8||sample.innerSatSpread>.16||sample.innerSpread>34
     );
     if(tcIsMottled||centerIsMottled){
       detail.invalid=true;

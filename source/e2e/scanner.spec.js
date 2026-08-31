@@ -29,7 +29,7 @@ function encodeStripPng() {
     for (let x = 0; x < width; x++) {
       let rgb = cream;
       centers.forEach((center, index) => {
-        if (Math.abs(y - center) <= 28 && x >= 80 && x <= 160) rgb = PAD_COLORS[index];
+        if (Math.abs(y - center) <= 40 && x >= 50 && x <= 190) rgb = PAD_COLORS[index];
       });
       const offset = y * (width * 3 + 1) + 1 + x * 3;
       raw[offset] = rgb[0];
@@ -68,6 +68,7 @@ test('synthetic strip photo auto-detects pads and reads chart colors', async ({ 
   await page.getByRole('button', { name: 'USE AUTO-DETECTED PADS' }).click();
   await expect(page.locator('#resultRows')).toContainText('Total Hardness');
   await expect(page.locator('#resultRows')).toContainText('250 ppm');
+  await expect(page.locator('#resultRows')).toContainText('Total Chlorine');
   await expect(page.locator('#resultRows')).toContainText('Free Chlorine');
   await expect(page.locator('#resultRows')).toContainText('5 ppm');
   await expect(page.locator('#resultRows')).toContainText('pH');

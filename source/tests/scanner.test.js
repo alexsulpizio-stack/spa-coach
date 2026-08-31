@@ -106,6 +106,21 @@ test('reversed pad colors are flipped back into tip-to-handle order',()=>{
   assert.equal(preferPadAssignment(forward).flipped,false);
 });
 
+test('total chlorine with noisy edges stays readable when the center is even',()=>{
+  const sample=rgb=>({rgb,innerSpread:4,outerSpread:80,outerMedianSpread:40,innerHueSpread:2,innerSatSpread:.02,outerHueSpread:2});
+  const sampled=[
+    sample(REFERENCES.hardness[2].rgb),
+    sample(REFERENCES.totalChlorine[4].rgb),
+    sample(REFERENCES.freeChlorine[4].rgb),
+    sample(REFERENCES.ph[2].rgb),
+    sample(REFERENCES.alkalinity[1].rgb),
+    sample(REFERENCES.cya[1].rgb)
+  ];
+  const result=buildPadReadings(sampled);
+  assert.equal(result.readings.totalChlorine,5);
+  assert.notEqual(result.details.totalChlorine.reason,'uneven-pad');
+});
+
 test('buildPadReadings rejects total chlorine below free chlorine',()=>{
   const sample=rgb=>({rgb,innerSpread:4,outerSpread:8,outerMedianSpread:4,innerHueSpread:2,innerSatSpread:.02,outerHueSpread:2});
   const sampled=[
