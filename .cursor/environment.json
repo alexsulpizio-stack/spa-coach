@@ -1,0 +1,16 @@
+{
+  "name": "Spa Coach",
+  "install": "cd source && npm ci && npx playwright install chromium --with-deps",
+  "terminals": [
+    {
+      "name": "web server",
+      "command": "cd source && npm run serve"
+    }
+  ],
+  "ports": [
+    {
+      "name": "Spa Coach web app",
+      "port": 4173
+    }
+  ]
+}
