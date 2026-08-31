@@ -4,11 +4,12 @@ const { createPhotoStore } = globalThis.SpaPhotoStore;
 const nativeAdapter = globalThis.SpaNativeBridge.createNativeBridge(window);
 const {
   PAD_ORDER,
-  REFERENCES,
-  WET_PROTOTYPES,
   colorCandidate,
   detectPadsAlongAxis,
-  matchColor
+  samplePatchFromPixels,
+  estimateWhitePoint,
+  buildPadReadings,
+  shouldLearnCalibration
 } = globalThis.SpaScanner;
 const {
   classify,
@@ -27,6 +28,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
 
   let state = loadState();
   let sourceImage = null;
+  let sourcePixels = null;
   let taps = [];
   let sampled = [];
   let timerHandle = null;
@@ -227,6 +229,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     try {
       const bitmap = await createImageBitmap(file);
       sourceImage = bitmap;
+      sourcePixels = null;
       await prepareSavedPhoto(bitmap);
       currentWorkingPhotoId = null;
       if (origin === 'camera' && currentPhotoFullBlob) {
@@ -287,108 +290,21 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     ctx.restore();
   }
 
-  function colorCandidateLegacy(r, g, b) {
-    const max = Math.max(r,g,b), min = Math.min(r,g,b);
-    return (max - min) > 18 && max < 250 && min > 6;
+  function getSourcePixels() {
+    if (sourcePixels || !sourceImage) return sourcePixels;
+    const copy = document.createElement('canvas');
+    copy.width = sourceImage.width;
+    copy.height = sourceImage.height;
+    const copyCtx = copy.getContext('2d', { willReadFrequently: true });
+    copyCtx.drawImage(sourceImage, 0, 0);
+    const imageData = copyCtx.getImageData(0, 0, copy.width, copy.height);
+    sourcePixels = { data: imageData.data, width: copy.width, height: copy.height };
+    return sourcePixels;
   }
 
-  function detectPadsAlongAxisLegacy(mask, w, h, orientation) {
-    const vertical = orientation === 'vertical';
-    const minorLen = vertical ? w : h;
-    const majorLen = vertical ? h : w;
-    const counts = new Float32Array(minorLen);
-
-    if (vertical) {
-      for (let y=0; y<h; y++) for (let x=0; x<w; x++) if (mask[y*w+x]) counts[x] += 1;
-    } else {
-      for (let y=0; y<h; y++) for (let x=0; x<w; x++) if (mask[y*w+x]) counts[y] += 1;
-    }
-
-    const win = Math.max(7, Math.round(minorLen * .045));
-    const halfWin = Math.floor(win/2);
-    let bestMinor = -1, bestSmooth = -1;
-    const lo = Math.round(minorLen * .04), hi = Math.round(minorLen * .96);
-    for (let i=lo; i<hi; i++) {
-      let sum = 0;
-      for (let j=Math.max(0,i-halfWin); j<=Math.min(minorLen-1,i+halfWin); j++) sum += counts[j];
-      if (sum > bestSmooth) { bestSmooth = sum; bestMinor = i; }
-    }
-    if (bestMinor < 0) return null;
-
-    const bandHalf = Math.max(7, Math.round(minorLen * .027));
-    const bandStart = Math.max(0, bestMinor-bandHalf), bandEnd = Math.min(minorLen-1, bestMinor+bandHalf);
-    const bandWidth = bandEnd-bandStart+1;
-    const fractions = new Float32Array(majorLen);
-    for (let major=0; major<majorLen; major++) {
-      let hits=0;
-      for (let minor=bandStart; minor<=bandEnd; minor++) {
-        const idx = vertical ? major*w+minor : minor*w+major;
-        if (mask[idx]) hits++;
-      }
-      fractions[major] = hits / bandWidth;
-    }
-
-    const threshold = .32;
-    const rawRuns = [];
-    let i=0;
-    while (i<majorLen) {
-      if (fractions[i] >= threshold) {
-        const start=i; let total=0, n=0;
-        while (i<majorLen && fractions[i] >= threshold) { total += fractions[i]; n++; i++; }
-        rawRuns.push({ start, end:i-1, coverage: total/Math.max(1,n) });
-      } else i++;
-    }
-
-    // Merge tiny breaks caused by texture or glare inside one reagent pad.
-    const merged=[];
-    for (const run of rawRuns) {
-      const prev=merged[merged.length-1];
-      if (prev && run.start-prev.end-1 <= 2) {
-        const n1=prev.end-prev.start+1, n2=run.end-run.start+1;
-        prev.coverage=(prev.coverage*n1+run.coverage*n2)/(n1+n2);
-        prev.end=run.end;
-      } else merged.push({...run});
-    }
-
-    const minRun=Math.max(3,Math.round(majorLen*.008));
-    const maxRun=Math.max(minRun+1,Math.round(majorLen*.12));
-    let runs=merged.filter(r => (r.end-r.start+1)>=minRun && (r.end-r.start+1)<=maxRun);
-    if (runs.length < 6) return null;
-    if (runs.length > 14) {
-      runs = [...runs].sort((a,b)=>(b.coverage*(b.end-b.start+1))-(a.coverage*(a.end-a.start+1))).slice(0,14).sort((a,b)=>a.start-b.start);
-    }
-
-    // Choose the six bands with the most strip-like spacing. This prevents a stray
-    // colored object from being mistaken for a seventh reagent pad.
-    let best=null;
-    const choose=(start, chosen) => {
-      if (chosen.length===6) {
-        const centers=chosen.map(r=>(r.start+r.end)/2);
-        const gaps=centers.slice(1).map((c,idx)=>c-centers[idx]);
-        const mean=gaps.reduce((a,b)=>a+b,0)/gaps.length;
-        if (mean < majorLen*.025 || mean > majorLen*.22) return;
-        const std=Math.sqrt(gaps.reduce((a,g)=>a+(g-mean)*(g-mean),0)/gaps.length);
-        const cv=std/Math.max(1,mean);
-        const coverage=chosen.reduce((a,r)=>a+r.coverage,0)/6;
-        const sizes=chosen.map(r=>r.end-r.start+1);
-        const sizeMean=sizes.reduce((a,b)=>a+b,0)/6;
-        const sizeStd=Math.sqrt(sizes.reduce((a,v)=>a+(v-sizeMean)*(v-sizeMean),0)/6);
-        const sizeCv=sizeStd/Math.max(1,sizeMean);
-        const minGap=Math.max(1,Math.min(...gaps)), maxGap=Math.max(...gaps);
-        const extreme=maxGap/minGap;
-        const score=coverage*100-cv*70-sizeCv*12-Math.max(0,extreme-1.8)*18;
-        if (!best || score>best.score) best={score, chosen:[...chosen], cv, coverage, meanGap:mean, extreme};
-        return;
-      }
-      for (let k=start; k<=runs.length-(6-chosen.length); k++) choose(k+1,[...chosen,runs[k]]);
-    };
-    choose(0,[]);
-    if (!best) return null;
-
-    const centers=best.chosen.map(r=>(r.start+r.end)/2);
-    const points=centers.map(c=>vertical?{x:bestMinor,y:c}:{x:c,y:bestMinor});
-    const confidence=(best.cv<.25 && best.coverage>.48 && best.extreme<1.8) ? 'high' : 'medium';
-    return {...best, points, orientation, confidence};
+  function canvasToSourcePoint(x, y) {
+    if (!sourceImage || !canvas.width || !canvas.height) return { x, y };
+    return { x: x * sourceImage.width / canvas.width, y: y * sourceImage.height / canvas.height };
   }
 
   function autoDetectPads() {
@@ -486,78 +402,11 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   canvas.addEventListener('touchend', onCanvasTap, { passive: false });
 
   function samplePatch(x, y) {
-    // v0.2.9: measure the reagent color from a deliberately small CENTER patch.
-    // The larger patch is diagnostic only; wet edges, droplets and the white strip
-    // around a pad must not cause an otherwise clean reagent pad to be rejected.
-    const minDim = Math.min(canvas.width, canvas.height);
-    const innerRadius = Math.max(5, Math.min(11, Math.round(minDim * .0055)));
-    const outerRadius = Math.max(12, Math.min(24, Math.round(minDim * .012)));
-
-    const rgbToHsv = ([r,g,b]) => {
-      r/=255; g/=255; b/=255;
-      const max=Math.max(r,g,b), min=Math.min(r,g,b), d=max-min;
-      let h=0;
-      if (d) {
-        if (max===r) h=60*(((g-b)/d)%6);
-        else if (max===g) h=60*(((b-r)/d)+2);
-        else h=60*(((r-g)/d)+4);
-      }
-      if (h<0) h+=360;
-      return { h, s:max===0?0:d/max, v:max };
-    };
-
-    const patch = (radius) => {
-      const sx = Math.max(0, Math.round(x - radius));
-      const sy = Math.max(0, Math.round(y - radius));
-      const sw = Math.min(canvas.width - sx, radius * 2 + 1);
-      const sh = Math.min(canvas.height - sy, radius * 2 + 1);
-      const data = ctx.getImageData(sx, sy, sw, sh).data;
-      const colors = [];
-      const all = [];
-      for (let i = 0; i < data.length; i += 4) {
-        const rgb = [data[i], data[i + 1], data[i + 2]];
-        all.push(rgb);
-        const max = Math.max(...rgb), min = Math.min(...rgb);
-        if (max - min > 8 && max < 250 && min > 10) colors.push(rgb);
-      }
-      const use = colors.length >= 20 ? colors : all;
-      const median = channel => {
-        const a = use.map(c => c[channel]).sort((a,b)=>a-b);
-        return a[Math.floor(a.length/2)] || 0;
-      };
-      const rgb = [median(0), median(1), median(2)];
-      const distances = use.map(c => Math.hypot(c[0]-rgb[0], c[1]-rgb[1], c[2]-rgb[2])).sort((a,b)=>a-b);
-      const p90 = distances[Math.floor(distances.length * .90)] || 0;
-      const medianSpread = distances[Math.floor(distances.length * .50)] || 0;
-
-      // Hue/saturation variation is more useful than raw brightness variation on a
-      // wet strip. Dark purple pads can vary greatly in brightness while remaining
-      // chemically uniform; a truly mottled pad tends to contain conflicting hues.
-      const hsv = use.map(rgbToHsv).filter(c => c.s >= .16 && c.v >= .07 && c.v <= .98);
-      let hueSpread = 0, satSpread = 0;
-      if (hsv.length >= 12) {
-        const cosMean = hsv.reduce((a,c)=>a+Math.cos(c.h*Math.PI/180),0)/hsv.length;
-        const sinMean = hsv.reduce((a,c)=>a+Math.sin(c.h*Math.PI/180),0)/hsv.length;
-        const R = Math.max(1e-6, Math.hypot(cosMean, sinMean));
-        hueSpread = Math.sqrt(Math.max(0,-2*Math.log(R))) * 180 / Math.PI;
-        const sats = hsv.map(c=>c.s).sort((a,b)=>a-b);
-        const q = f => sats[Math.min(sats.length-1, Math.floor((sats.length-1)*f))];
-        satSpread = q(.90)-q(.10);
-      }
-      return { rgb, p90, medianSpread, hueSpread, satSpread };
-    };
-
-    const inner = patch(innerRadius);
-    const outer = patch(outerRadius);
-    return {
-      rgb: inner.rgb,
-      innerSpread: Math.round(inner.p90 * 10) / 10,
-      outerSpread: Math.round(outer.p90 * 10) / 10,
-      outerMedianSpread: Math.round(outer.medianSpread * 10) / 10,
-      innerHueSpread: Math.round(inner.hueSpread * 10) / 10,
-      innerSatSpread: Math.round(inner.satSpread * 1000) / 1000,
-      outerHueSpread: Math.round(outer.hueSpread * 10) / 10
-    };
+    // Sample the full-resolution source photo, not the downscaled display canvas.
+    const pixels = getSourcePixels();
+    if (!pixels) return { rgb:[0,0,0], innerSpread:0, outerSpread:0, outerMedianSpread:0, innerHueSpread:0, innerSatSpread:0, outerHueSpread:0 };
+    const source = canvasToSourcePoint(x, y);
+    return samplePatchFromPixels(pixels.data, pixels.width, pixels.height, source.x, source.y);
   }
 
   function makePadCrop(x, y) {
@@ -612,154 +461,37 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   };
 
   function analyzeTaps() {
-    const readings = {};
-    const details = {};
-    PAD_ORDER.forEach((pad, i) => {
-      const sample = sampled[i];
-      const match = matchColor(sample.rgb, REFERENCES[pad.key], pad.key, state.scannerCalibrations);
-      const detail = { ...match, rgb: sample.rgb, innerSpread: sample.innerSpread, outerSpread: sample.outerSpread,
-        innerHueSpread: sample.innerHueSpread, innerSatSpread: sample.innerSatSpread, outerHueSpread: sample.outerHueSpread,
-        cropDataUrl: makePadCrop(taps[i].x, taps[i].y) };
-
-      // v0.3 quality gate: do NOT reject a clean pad merely because its wet edges
-      // or brightness vary. Total Chlorine gets a tighter two-tone/mottling check;
-      // other pads are rejected only for extreme conflicting color inside the center.
-      const centerIsMottled = sample.innerHueSpread > 30 && sample.innerSatSpread > .20 && sample.innerSpread > 55;
-      const tcIsMottled = pad.key === 'totalChlorine' && (
-        sample.innerHueSpread > 8 || sample.innerSatSpread > .16 || sample.innerSpread > 34 || sample.outerMedianSpread > 30
-      );
-      if (tcIsMottled || centerIsMottled) {
-        detail.invalid = true;
-        detail.reason = 'uneven-pad';
-        detail.confidence = 'rejected';
-      } else if (sample.outerSpread > 95 && detail.confidence === 'high') {
-        // Edge noise is worth a confidence downgrade, not rejection.
-        detail.confidence = 'medium';
-        detail.edgeNoise = true;
-      }
-      details[pad.key] = detail;
-      readings[pad.key] = detail.invalid ? null : match.value;
-    });
-
-    // Chemistry sanity check: total chlorine cannot be lower than free chlorine.
-    const tc = num(readings.totalChlorine), fc = num(readings.freeChlorine);
-    if (Number.isFinite(tc) && Number.isFinite(fc) && tc < fc) {
-      details.totalChlorine.invalid = true;
-      details.totalChlorine.reason = 'chemistry-conflict';
-      details.totalChlorine.confidence = 'rejected';
-      details.totalChlorine.candidate = readings.totalChlorine;
-      readings.totalChlorine = null;
+    const pixels = getSourcePixels();
+    const sourcePoints = taps.map(point => canvasToSourcePoint(point.x, point.y));
+    const whitePoint = pixels ? estimateWhitePoint(pixels.data, pixels.width, pixels.height, sourcePoints) : null;
+    const result = buildPadReadings(sampled, state.scannerCalibrations, { whitePoint });
+    if (result.flipped) {
+      taps = [...taps].reverse();
+      sampled = [...sampled].reverse();
+      drawScanImage();
     }
-
-    // Low-confidence noncritical values keep their candidate for review but are not
-    // silently promoted to an authoritative measurement.
-    PAD_ORDER.forEach(pad => {
-      const d = details[pad.key];
-      if (!d.invalid && d.confidence === 'low') {
-        d.uncertain = true;
-        d.candidate = readings[pad.key];
-        if (pad.key === 'totalChlorine') {
-          d.invalid = true;
-          d.reason = 'unreliable-color';
-          d.confidence = 'rejected';
-          readings[pad.key] = null;
-        } else if (!['freeChlorine', 'ph'].includes(pad.key)) {
-          readings[pad.key] = null;
-        }
-      }
+    PAD_ORDER.forEach((pad, i) => {
+      if (result.details[pad.key]) result.details[pad.key].cropDataUrl = makePadCrop(taps[i].x, taps[i].y);
     });
-
-    state.readings = readings;
-    state.scan = { at: new Date().toISOString(), details, version: APP_VERSION, detectionMode: autoDetectionActive ? 'automatic' : 'manual', detection: autoDetectionInfo ? { orientation:autoDetectionInfo.orientation, confidence:autoDetectionInfo.confidence, score:Math.round(autoDetectionInfo.score*10)/10 } : null };
+    state.readings = result.readings;
+    state.scan = {
+      at: new Date().toISOString(),
+      details: result.details,
+      version: APP_VERSION,
+      detectionMode: autoDetectionActive ? 'automatic' : 'manual',
+      detection: autoDetectionInfo ? {
+        orientation: autoDetectionInfo.orientation,
+        confidence: autoDetectionInfo.confidence,
+        score: Math.round(autoDetectionInfo.score * 10) / 10,
+        flipped: result.flipped,
+        whiteBalanced: Boolean(whitePoint)
+      } : { flipped: result.flipped, whiteBalanced: Boolean(whitePoint) }
+    };
     saveState();
     renderResults();
     showScreen('resultsScreen');
   }
 
-  function matchColorLegacy(rgb, refs, key) {
-    const lab = rgbToLab(rgb);
-    const lch = labToLch(lab);
-    const hueDriven = ['hardness', 'ph', 'alkalinity', 'cya'].includes(key) && lch.C >= 8;
-    const candidates = [
-      ...refs.map(r => ({ ...r, calibration: 'printed' })),
-      ...(WET_PROTOTYPES[key] || []).map(r => ({ ...r, calibration: 'wet' })),
-      ...(state.scannerCalibrations || []).filter(r => r.key === key).slice(-12).map(r => ({ value:r.value, rgb:r.rgb, calibration:'learned' }))
-    ];
-
-    const scored = candidates.map(ref => {
-      const refLab = rgbToLab(ref.rgb);
-      const refLch = labToLch(refLab);
-      let d;
-      if (hueDriven) {
-        d = hueDistance(lch.h, refLch.h) + Math.abs(lch.C-refLch.C)*.07 + Math.abs(lch.L-refLch.L)*.025;
-      } else {
-        d = deltaE(lab, refLab);
-      }
-      return { ...ref, d, hueDiff: hueDistance(lch.h, refLch.h), refLch };
-    }).sort((a,b)=>a.d-b.d);
-
-    const ranked = [];
-    for (const item of scored) {
-      if (!ranked.some(x => String(x.value) === String(item.value))) ranked.push(item);
-    }
-
-    let best = ranked[0], second = ranked[1];
-    if (key === 'ph' && best?.value === 8.4 && second?.value === 7.8 && (second.d - best.d) < 3.5 && lch.L < 58) {
-      [best, second] = [second, best];
-    }
-
-    const separation = second ? second.d - best.d : 999;
-    let confidence = 'high';
-    if (hueDriven) {
-      if (best.hueDiff > 24 || separation < 1.5) confidence = 'low';
-      else if (best.hueDiff > 14 || separation < 4) confidence = 'medium';
-    } else {
-      if (best.d > 32 || separation < 3) confidence = 'low';
-      else if (best.d > 22 || separation < 6) confidence = 'medium';
-    }
-    if (best.calibration === 'wet' && best.d < 8 && confidence === 'low') confidence = 'medium';
-    if (key === 'freeChlorine' && best.value === 20 && best.hueDiff < 12 && lch.L <= best.refLch.L + 4) {
-      confidence = separation >= 1.5 ? 'high' : 'medium';
-    }
-
-    const canonicalRgb = value => refs.find(r => String(r.value) === String(value))?.rgb || best.rgb;
-    const alternatives = [best, second].filter(Boolean).map(item => ({
-      value: item.value, rgb: canonicalRgb(item.value), distance: Math.round(item.d * 10)/10
-    }));
-
-    return {
-      value: best.value,
-      distance: Math.round(best.d * 10)/10,
-      separation: Math.round(separation*10)/10,
-      hueDiff: Math.round(best.hueDiff*10)/10,
-      confidence,
-      mode: hueDriven ? 'hue-calibrated' : 'lab',
-      alternatives
-    };
-  }
-
-  function rgbToLab([r,g,b]) {
-    r/=255; g/=255; b/=255;
-    r = r > .04045 ? Math.pow((r+.055)/1.055,2.4) : r/12.92;
-    g = g > .04045 ? Math.pow((g+.055)/1.055,2.4) : g/12.92;
-    b = b > .04045 ? Math.pow((b+.055)/1.055,2.4) : b/12.92;
-    let x=(r*.4124+g*.3576+b*.1805)/.95047;
-    let y=(r*.2126+g*.7152+b*.0722)/1.0;
-    let z=(r*.0193+g*.1192+b*.9505)/1.08883;
-    const f=t=>t>.008856?Math.cbrt(t):(7.787*t)+(16/116);
-    x=f(x); y=f(y); z=f(z);
-    return [(116*y)-16, 500*(x-y), 200*(y-z)];
-  }
-  function labToLch([L,a,b]) {
-    const C = Math.hypot(a,b);
-    const h = (Math.atan2(b,a) * 180 / Math.PI + 360) % 360;
-    return { L, C, h };
-  }
-  function hueDistance(a,b) {
-    const d = Math.abs(a-b) % 360;
-    return Math.min(d, 360-d);
-  }
-  function deltaE(a,b) { return Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]); }
   function displayValue(pad, value, detail = null) {
     if (value === null || value === undefined || value === '') {
       if (detail?.skipped) return 'Unknown / skipped';
@@ -800,6 +532,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     if (Object.values(details).some(d => d?.confidence === 'low' || d?.uncertain)) warnings.push('One or more pads are uncertain. Review those values against the bottle chart before relying on them.');
     if (Object.values(details).some(d => d?.reason === 'uneven-pad')) warnings.push('A pad was marked not readable because its center color was too uneven to measure reliably.');
     if (details.totalChlorine?.reason === 'chemistry-conflict' || chemistryConflict) warnings.push('Total chlorine cannot be lower than free chlorine. Correct the reading or mark Total Chlorine Unknown / skip before treatment.');
+    if (state.scan?.detection?.flipped) warnings.push('Spa Coach flipped pad 1–6 because the colors fit the bottle order better that way. Confirm the tip is pad 1.');
     $('scanWarnings').innerHTML = warnings.map(w=>`<div class="callout warn-callout">⚠️ ${w}</div>`).join('');
   }
 
@@ -914,7 +647,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
       const raw = $(`edit_${pad.key}`).value;
       if (state.scan?.details?.[pad.key]) {
         const d = state.scan.details[pad.key];
-        if ($('calibrationOptIn')?.checked && raw !== '__unknown' && Array.isArray(d.rgb) && String(d.candidate) !== String(r[pad.key])) {
+        if ($('calibrationOptIn')?.checked && shouldLearnCalibration(d, r[pad.key], raw === '__unknown')) {
           state.scannerCalibrations = [...(state.scannerCalibrations || []), { key:pad.key, value:r[pad.key], rgb:d.rgb, at:new Date().toISOString() }].slice(-72);
         }
         if (raw === '__unknown') {
@@ -1237,6 +970,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
       if (!rec?.fullBlob) throw new Error('missing photo');
       const bitmap = await createImageBitmap(rec.fullBlob);
       sourceImage = bitmap;
+      sourcePixels = null;
       currentPhotoFullBlob = rec.fullBlob;
       currentPhotoThumbBlob = rec.thumbBlob || await compressBitmap(bitmap, 260, .72);
       currentWorkingPhotoId = rec.kind === 'capture' ? rec.id : null;
@@ -1269,6 +1003,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
       if (!rec?.fullBlob) { alert('That saved photo is no longer available on this device.'); return; }
       const bitmap = await createImageBitmap(rec.fullBlob);
       sourceImage = bitmap;
+      sourcePixels = null;
       currentPhotoFullBlob = rec.fullBlob;
       currentPhotoThumbBlob = rec.thumbBlob || await compressBitmap(bitmap, 260, .72);
       beginScanForCurrentImage();
@@ -1457,7 +1192,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     $('countdown').classList.add('hidden'); $('photoPrompt').classList.remove('hidden');
     const callout = $('photoReadyCallout');
     if (callout) callout.innerHTML = '<strong>Ready when you are.</strong> The timer is optional. If the strip is already at its read time, take or choose a photo now.';
-    $('stripCameraInput').value=''; $('stripGalleryInput').value=''; taps=[]; sampled=[]; sourceImage=null; autoDetectionActive=false; autoDetectionInfo=null;
+    $('stripCameraInput').value=''; $('stripGalleryInput').value=''; taps=[]; sampled=[]; sourceImage=null; sourcePixels=null; autoDetectionActive=false; autoDetectionInfo=null;
     currentPhotoFullBlob=null; currentPhotoThumbBlob=null; currentViewedPhotoId=null; currentWorkingPhotoId=null;
   }
   function relativeTime(iso) {

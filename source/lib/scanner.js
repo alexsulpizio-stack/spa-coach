@@ -36,13 +36,43 @@ const REFERENCES = {
   ]
 };
 
-// These are the documented wet-strip prototypes already captured by the project.
+function shadePrinted(rgb, amount) {
+  return rgb.map(channel => Math.max(0, Math.min(255, Math.round(channel * (1 - amount)))));
+}
+
+// Documented wet captures plus extra wet-darkened chart steps so chlorine and
+// neighboring pads still match when the reagent is darker than the bottle print.
 const WET_PROTOTYPES = {
-  hardness:[{ value:250, rgb:[83,70,113] }],
-  freeChlorine:[{ value:20, rgb:[45,18,43] }],
-  ph:[{ value:7.8, rgb:[148,98,100] }],
-  alkalinity:[{ value:40, rgb:[161,137,76] }],
-  cya:[{ value:'30–50', rgb:[132,96,74] }]
+  hardness:[
+    { value:250, rgb:[83,70,113] },
+    { value:0, rgb:shadePrinted([62,75,121], .12) },
+    { value:500, rgb:shadePrinted([143,45,101], .16) }
+  ],
+  totalChlorine:[
+    { value:0, rgb:shadePrinted([165,158,103], .2) },
+    { value:5, rgb:shadePrinted([126,160,129], .18) },
+    { value:10, rgb:shadePrinted([103,159,132], .18) }
+  ],
+  freeChlorine:[
+    { value:20, rgb:[45,18,43] },
+    { value:5, rgb:shadePrinted([212,158,214], .22) },
+    { value:10, rgb:shadePrinted([197,107,198], .22) }
+  ],
+  ph:[
+    { value:7.8, rgb:[148,98,100] },
+    { value:7.2, rgb:shadePrinted([216,120,84], .22) },
+    { value:8.4, rgb:shadePrinted([223,74,108], .2) }
+  ],
+  alkalinity:[
+    { value:40, rgb:[161,137,76] },
+    { value:80, rgb:shadePrinted([104,100,45], .12) },
+    { value:120, rgb:shadePrinted([109,111,88], .12) }
+  ],
+  cya:[
+    { value:'30–50', rgb:[132,96,74] },
+    { value:100, rgb:shadePrinted([218,91,89], .22) },
+    { value:150, rgb:shadePrinted([206,42,139], .2) }
+  ]
 };
 
 function rgbToLab([r,g,b]) {
@@ -68,8 +98,64 @@ function hueDistance(a,b) {
   return Math.min(distance,360-distance);
 }
 
-function matchColor(rgb, refs, key, learnedCalibrations=[]) {
-  const lab=rgbToLab(rgb);
+function deltaE2000(lab1,lab2) {
+  const [L1,a1,b1]=lab1,[L2,a2,b2]=lab2;
+  const C1=Math.hypot(a1,b1),C2=Math.hypot(a2,b2),Cbar=(C1+C2)/2;
+  const Cbar7=Cbar**7,G=.5*(1-Math.sqrt(Cbar7/(Cbar7+25**7)));
+  const a1p=a1*(1+G),a2p=a2*(1+G);
+  const C1p=Math.hypot(a1p,b1),C2p=Math.hypot(a2p,b2);
+  const hp= (a,b)=>{const h=Math.atan2(b,a)*180/Math.PI;return h>=0?h:h+360;};
+  const h1p=C1p<1e-8?0:hp(a1p,b1),h2p=C2p<1e-8?0:hp(a2p,b2);
+  const dLp=L2-L1,dCp=C2p-C1p;
+  let dhp=0;
+  if(C1p>=1e-8&&C2p>=1e-8){
+    dhp=h2p-h1p;
+    if(dhp>180)dhp-=360;
+    else if(dhp<-180)dhp+=360;
+  }
+  const dHp=2*Math.sqrt(C1p*C2p)*Math.sin(dhp*Math.PI/360);
+  const Lbarp=(L1+L2)/2,Cbarp=(C1p+C2p)/2;
+  let hbarp=h1p+h2p;
+  if(C1p>=1e-8&&C2p>=1e-8){
+    if(Math.abs(h1p-h2p)<=180)hbarp=(h1p+h2p)/2;
+    else hbarp=(h1p+h2p<360)?(h1p+h2p+360)/2:(h1p+h2p-360)/2;
+  }
+  const T=1-.17*Math.cos((hbarp-30)*Math.PI/180)+.24*Math.cos(2*hbarp*Math.PI/180)
+    +.32*Math.cos((3*hbarp+6)*Math.PI/180)-.2*Math.cos((4*hbarp-63)*Math.PI/180);
+  const dTheta=30*Math.exp(-(((hbarp-275)/25)**2));
+  const Rc=2*Math.sqrt(Cbarp**7/(Cbarp**7+25**7));
+  const SL=1+(.015*(Lbarp-50)**2)/Math.sqrt(20+(Lbarp-50)**2);
+  const SC=1+.045*Cbarp,SH=1+.015*Cbarp*T;
+  const RT=-Math.sin(2*dTheta*Math.PI/180)*Rc;
+  const dL=dLp/SL,dC=dCp/SC,dH=dHp/SH;
+  return Math.sqrt(dL*dL+dC*dC+dH*dH+RT*dC*dH);
+}
+
+function clampByte(value) {
+  return Math.max(0,Math.min(255,Math.round(value)));
+}
+
+function whiteBalanceRgb(rgb,whitePoint) {
+  if(!Array.isArray(whitePoint)||whitePoint.length<3)return rgb;
+  const [wr,wg,wb]=whitePoint;
+  const avg=(wr+wg+wb)/3;
+  if(avg<50)return rgb;
+  const scale=channel=>{
+    const ratio=avg/Math.max(8,channel);
+    return Math.max(.72,Math.min(1.38,ratio));
+  };
+  return [clampByte(rgb[0]*scale(wr)),clampByte(rgb[1]*scale(wg)),clampByte(rgb[2]*scale(wb))];
+}
+
+function applyColorCast(rgb,whitePoint) {
+  const [wr,wg,wb]=whitePoint;
+  const avg=(wr+wg+wb)/3;
+  return [clampByte(rgb[0]*wr/avg),clampByte(rgb[1]*wg/avg),clampByte(rgb[2]*wb/avg)];
+}
+
+function matchColor(rgb, refs, key, learnedCalibrations=[], options={}) {
+  const sample=options.whitePoint?whiteBalanceRgb(rgb,options.whitePoint):rgb;
+  const lab=rgbToLab(sample);
   const lch=labToLch(lab);
   const hueDriven=['hardness','ph','alkalinity','cya'].includes(key)&&lch.C>=8;
   const candidates=[
@@ -81,7 +167,7 @@ function matchColor(rgb, refs, key, learnedCalibrations=[]) {
     const refLab=rgbToLab(ref.rgb),refLch=labToLch(refLab);
     const distance=hueDriven
       ? hueDistance(lch.h,refLch.h)+Math.abs(lch.C-refLch.C)*.07+Math.abs(lch.L-refLch.L)*.025
-      : Math.hypot(lab[0]-refLab[0],lab[1]-refLab[1],lab[2]-refLab[2]);
+      : deltaE2000(lab,refLab);
     return {...ref,d:distance,hueDiff:hueDistance(lch.h,refLch.h),refLch};
   }).sort((a,b)=>a.d-b.d);
   const ranked=[];
@@ -94,8 +180,8 @@ function matchColor(rgb, refs, key, learnedCalibrations=[]) {
     if(best.hueDiff>24||separation<1.5)confidence='low';
     else if(best.hueDiff>14||separation<4)confidence='medium';
   }else{
-    if(best.d>32||separation<3)confidence='low';
-    else if(best.d>22||separation<6)confidence='medium';
+    if(best.d>28||separation<2.5)confidence='low';
+    else if(best.d>18||separation<5)confidence='medium';
   }
   if(best.calibration==='wet'&&best.d<8&&confidence==='low')confidence='medium';
   if(key==='freeChlorine'&&best.value===20&&best.hueDiff<12&&lch.L<=best.refLch.L+4)confidence=separation>=1.5?'high':'medium';
@@ -109,6 +195,186 @@ function matchColor(rgb, refs, key, learnedCalibrations=[]) {
     mode:hueDriven?'hue-calibrated':'lab',
     alternatives:[best,second].filter(Boolean).map(item=>({value:item.value,rgb:canonicalRgb(item.value),distance:Math.round(item.d*10)/10}))
   };
+}
+
+function assignmentScore(matches) {
+  const mean=matches.reduce((sum,item)=>sum+item.distance,0)/Math.max(1,matches.length);
+  const lows=matches.filter(item=>item.confidence==='low').length;
+  return mean+lows*8;
+}
+
+function preferPadAssignment(rgbs, learnedCalibrations=[], options={}) {
+  if(!Array.isArray(rgbs)||rgbs.length!==PAD_ORDER.length)return {flipped:false,rgbs,matches:[]};
+  const score=colors=>PAD_ORDER.map((pad,index)=>matchColor(colors[index],REFERENCES[pad.key],pad.key,learnedCalibrations,options));
+  const forward=score(rgbs);
+  const reversedColors=[...rgbs].reverse();
+  const reverse=score(reversedColors);
+  const flipped=assignmentScore(reverse)<assignmentScore(forward)-6;
+  return {
+    flipped,
+    rgbs:flipped?reversedColors:rgbs,
+    matches:flipped?reverse:forward,
+    forwardScore:assignmentScore(forward),
+    reverseScore:assignmentScore(reverse)
+  };
+}
+
+function shouldLearnCalibration(detail, confirmedValue, skipped=false) {
+  if(skipped||!Array.isArray(detail?.rgb))return false;
+  if(confirmedValue===null||confirmedValue===undefined||confirmedValue==='')return false;
+  return String(detail.value)!==String(confirmedValue);
+}
+
+function rgbToHsv([r,g,b]) {
+  r/=255; g/=255; b/=255;
+  const max=Math.max(r,g,b),min=Math.min(r,g,b),d=max-min;
+  let h=0;
+  if(d){
+    if(max===r)h=60*(((g-b)/d)%6);
+    else if(max===g)h=60*(((b-r)/d)+2);
+    else h=60*(((r-g)/d)+4);
+  }
+  if(h<0)h+=360;
+  return {h,s:max===0?0:d/max,v:max};
+}
+
+function samplePatchFromPixels(data,width,height,x,y) {
+  const minDim=Math.min(width,height);
+  const innerRadius=Math.max(8,Math.min(18,Math.round(minDim*.0055)));
+  const outerRadius=Math.max(18,Math.min(40,Math.round(minDim*.012)));
+  const patch=radius=>{
+    const sx=Math.max(0,Math.round(x-radius));
+    const sy=Math.max(0,Math.round(y-radius));
+    const sw=Math.min(width-sx,radius*2+1);
+    const sh=Math.min(height-sy,radius*2+1);
+    const colors=[],all=[];
+    for(let py=sy;py<sy+sh;py++){
+      for(let px=sx;px<sx+sw;px++){
+        const i=(py*width+px)*4;
+        const rgb=[data[i],data[i+1],data[i+2]];
+        all.push(rgb);
+        const maximum=Math.max(...rgb),minimum=Math.min(...rgb);
+        if(maximum-minimum>18&&maximum<250&&minimum>10)colors.push(rgb);
+      }
+    }
+    const use=colors.length>=20?colors:all;
+    const median=channel=>{
+      const values=use.map(item=>item[channel]).sort((a,b)=>a-b);
+      return values[Math.floor(values.length/2)]||0;
+    };
+    const rgb=[median(0),median(1),median(2)];
+    const distances=use.map(item=>Math.hypot(item[0]-rgb[0],item[1]-rgb[1],item[2]-rgb[2])).sort((a,b)=>a-b);
+    const p90=distances[Math.floor(distances.length*.9)]||0;
+    const medianSpread=distances[Math.floor(distances.length*.5)]||0;
+    const hsv=use.map(rgbToHsv).filter(item=>item.s>=.16&&item.v>=.07&&item.v<=.98);
+    let hueSpread=0,satSpread=0;
+    if(hsv.length>=12){
+      const cosMean=hsv.reduce((sum,item)=>sum+Math.cos(item.h*Math.PI/180),0)/hsv.length;
+      const sinMean=hsv.reduce((sum,item)=>sum+Math.sin(item.h*Math.PI/180),0)/hsv.length;
+      const R=Math.max(1e-6,Math.hypot(cosMean,sinMean));
+      hueSpread=Math.sqrt(Math.max(0,-2*Math.log(R)))*180/Math.PI;
+      const sats=hsv.map(item=>item.s).sort((a,b)=>a-b);
+      const q=f=>sats[Math.min(sats.length-1,Math.floor((sats.length-1)*f))];
+      satSpread=q(.9)-q(.1);
+    }
+    return {rgb,p90,medianSpread,hueSpread,satSpread};
+  };
+  const inner=patch(innerRadius);
+  const outer=patch(outerRadius);
+  return {
+    rgb:inner.rgb,
+    innerSpread:Math.round(inner.p90*10)/10,
+    outerSpread:Math.round(outer.p90*10)/10,
+    outerMedianSpread:Math.round(outer.medianSpread*10)/10,
+    innerHueSpread:Math.round(inner.hueSpread*10)/10,
+    innerSatSpread:Math.round(inner.satSpread*1000)/1000,
+    outerHueSpread:Math.round(outer.hueSpread*10)/10
+  };
+}
+
+function estimateWhitePoint(data,width,height,points) {
+  if(!data||!points?.length)return null;
+  const minDim=Math.min(width,height);
+  const inner=Math.max(14,Math.round(minDim*.018));
+  const outer=Math.max(inner+6,Math.round(minDim*.038));
+  const samples=[];
+  points.forEach(point=>{
+    const cx=Math.round(point.x),cy=Math.round(point.y);
+    for(let y=cy-outer;y<=cy+outer;y++){
+      if(y<0||y>=height)continue;
+      for(let x=cx-outer;x<=cx+outer;x++){
+        if(x<0||x>=width)continue;
+        const chebyshev=Math.max(Math.abs(x-cx),Math.abs(y-cy));
+        if(chebyshev<inner||chebyshev>outer)continue;
+        const i=(y*width+x)*4;
+        const r=data[i],g=data[i+1],b=data[i+2];
+        const maximum=Math.max(r,g,b),minimum=Math.min(r,g,b);
+        if(maximum-minimum<48&&(r+g+b)/3>110&&maximum<252)samples.push([r,g,b]);
+      }
+    }
+  });
+  if(samples.length<24)return null;
+  const median=channel=>{
+    const values=samples.map(item=>item[channel]).sort((a,b)=>a-b);
+    return values[Math.floor(values.length/2)];
+  };
+  return [median(0),median(1),median(2)];
+}
+
+function readingNumber(value) {
+  if(typeof value==='number')return value;
+  if(value===''||value==null)return NaN;
+  return Number(value);
+}
+
+function buildPadReadings(sampled, learnedCalibrations=[], options={}) {
+  const assignment=preferPadAssignment((sampled||[]).map(item=>item.rgb),learnedCalibrations,options);
+  const ordered=assignment.flipped?[...sampled].reverse():sampled;
+  const readings={},details={};
+  PAD_ORDER.forEach((pad,index)=>{
+    const sample=ordered[index];
+    const match=matchColor(sample.rgb,REFERENCES[pad.key],pad.key,learnedCalibrations,options);
+    const detail={...match,rgb:sample.rgb,innerSpread:sample.innerSpread,outerSpread:sample.outerSpread,
+      innerHueSpread:sample.innerHueSpread,innerSatSpread:sample.innerSatSpread,outerHueSpread:sample.outerHueSpread};
+    const centerIsMottled=sample.innerHueSpread>30&&sample.innerSatSpread>.2&&sample.innerSpread>55;
+    const tcIsMottled=pad.key==='totalChlorine'&&(
+      sample.innerHueSpread>8||sample.innerSatSpread>.16||sample.innerSpread>34
+    );
+    if(tcIsMottled||centerIsMottled){
+      detail.invalid=true;
+      detail.reason='uneven-pad';
+      detail.confidence='rejected';
+    }else if(sample.outerSpread>95&&detail.confidence==='high'){
+      detail.confidence='medium';
+      detail.edgeNoise=true;
+    }
+    details[pad.key]=detail;
+    readings[pad.key]=detail.invalid?null:match.value;
+  });
+  const tc=readingNumber(readings.totalChlorine),fc=readingNumber(readings.freeChlorine);
+  if(Number.isFinite(tc)&&Number.isFinite(fc)&&tc<fc){
+    details.totalChlorine.invalid=true;
+    details.totalChlorine.reason='chemistry-conflict';
+    details.totalChlorine.confidence='rejected';
+    details.totalChlorine.candidate=readings.totalChlorine;
+    readings.totalChlorine=null;
+  }
+  PAD_ORDER.forEach(pad=>{
+    const detail=details[pad.key];
+    if(!detail.invalid&&detail.confidence==='low'){
+      detail.uncertain=true;
+      detail.candidate=readings[pad.key];
+      if(pad.key==='totalChlorine'){
+        detail.invalid=true;
+        detail.reason='unreliable-color';
+        detail.confidence='rejected';
+        readings[pad.key]=null;
+      }else if(!['freeChlorine','ph'].includes(pad.key)){
+        readings[pad.key]=null;
+      }
+    }
+  });
+  return {readings,details,flipped:assignment.flipped,assignment};
 }
 
 function colorCandidate(r,g,b) {
@@ -183,8 +449,27 @@ function detectPadsAlongAxis(mask,width,height,orientation) {
   choose(0,[]);
   if(!best)return null;
   const points=best.chosen.map(run=>(run.start+run.end)/2).map(center=>vertical?{x:bestMinor,y:center}:{x:center,y:bestMinor});
-  return {...best,points,orientation,searchEvaluations,confidence:best.cv<.25&&best.coverage>.48&&best.extreme<1.8?'high':'medium'};
+  let confidence='medium';
+  if(best.cv>.35||best.coverage<.32||best.extreme>2.4)confidence='low';
+  else if(best.cv<.25&&best.coverage>.48&&best.extreme<1.8)confidence='high';
+  return {...best,points,orientation,searchEvaluations,confidence};
 }
 
-globalThis.SpaScanner=Object.freeze({PAD_ORDER,REFERENCES,WET_PROTOTYPES,colorCandidate,detectPadsAlongAxis,matchColor,rgbToLab});
+globalThis.SpaScanner=Object.freeze({
+  PAD_ORDER,
+  REFERENCES,
+  WET_PROTOTYPES,
+  colorCandidate,
+  detectPadsAlongAxis,
+  matchColor,
+  rgbToLab,
+  deltaE2000,
+  whiteBalanceRgb,
+  applyColorCast,
+  samplePatchFromPixels,
+  estimateWhitePoint,
+  preferPadAssignment,
+  shouldLearnCalibration,
+  buildPadReadings
+});
 })();

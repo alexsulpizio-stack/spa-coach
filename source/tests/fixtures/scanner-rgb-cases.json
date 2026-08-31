@@ -1,7 +1,18 @@
 [
   {"key":"hardness","rgb":[103,64,128],"expected":250,"source":"printed chart"},
+  {"key":"hardness","rgb":[62,75,121],"expected":0,"source":"printed chart"},
+  {"key":"hardness","rgb":[183,40,94],"expected":1000,"source":"printed chart"},
+  {"key":"totalChlorine","rgb":[165,158,103],"expected":0,"source":"printed chart"},
+  {"key":"totalChlorine","rgb":[126,160,129],"expected":5,"source":"printed chart"},
+  {"key":"totalChlorine","rgb":[103,159,132],"expected":10,"source":"printed chart"},
+  {"key":"freeChlorine","rgb":[248,249,248],"expected":0,"source":"printed chart"},
+  {"key":"freeChlorine","rgb":[212,158,214],"expected":5,"source":"printed chart"},
+  {"key":"ph","rgb":[216,120,84],"expected":7.2,"source":"printed chart"},
+  {"key":"alkalinity","rgb":[78,108,90],"expected":180,"source":"printed chart"},
+  {"key":"cya","rgb":[191,38,166],"expected":300,"source":"printed chart"},
   {"key":"freeChlorine","rgb":[45,18,43],"expected":20,"source":"documented wet prototype"},
   {"key":"ph","rgb":[148,98,100],"expected":7.8,"source":"documented wet prototype"},
   {"key":"alkalinity","rgb":[161,137,76],"expected":40,"source":"documented wet prototype"},
-  {"key":"cya","rgb":[132,96,74],"expected":"30–50","source":"documented wet prototype"}
+  {"key":"cya","rgb":[132,96,74],"expected":"30–50","source":"documented wet prototype"},
+  {"key":"hardness","rgb":[83,70,113],"expected":250,"source":"documented wet prototype"}
 ]
