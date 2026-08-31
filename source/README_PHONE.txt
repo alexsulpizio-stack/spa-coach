@@ -1,4 +1,4 @@
-SPA COACH PHONE v0.8.0
+SPA COACH PHONE v0.9.0
 
 BROWSER TESTING:
 1. Run start_phone.bat on the PC.
@@ -15,4 +15,4 @@ REAL ANDROID REMINDERS:
 Once the APK is installed, the PC is not needed for normal use.
 
 UPDATES:
-Settings > Check for Updates downloads the release inside Spa Coach, verifies its SHA-256 digest, and then opens Android's installer. Approve the per-app “install unknown apps” setting when Android requests it.
+Settings > Check for Updates verifies the signed manifest plus the APK digest, package name, version, and signing certificate before opening Android's installer. Approve the per-app “install unknown apps” setting when Android requests it.
