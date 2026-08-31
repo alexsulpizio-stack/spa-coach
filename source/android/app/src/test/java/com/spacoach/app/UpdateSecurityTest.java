@@ -1,6 +1,7 @@
 package com.spacoach.app;
 
 import static org.junit.Assert.assertThrows;
+import static org.junit.Assert.assertTrue;
 
 import org.json.JSONObject;
 import org.junit.Test;
@@ -17,6 +18,14 @@ import java.util.Base64;
 @RunWith(RobolectricTestRunner.class)
 @Config(sdk = 35)
 public class UpdateSecurityTest {
+    @Test
+    public void manifestUrlIsUniqueAndPreservesExistingQuery() throws Exception {
+        String first = UpdateSecurity.cacheBustedManifestUrl("https://example.com/update.json", 91, 1234).toString();
+        String second = UpdateSecurity.cacheBustedManifestUrl("https://example.com/update.json?channel=stable", 91, 5678).toString();
+        assertTrue(first.endsWith("?installedVersion=91&nonce=1234"));
+        assertTrue(second.endsWith("&installedVersion=91&nonce=5678"));
+    }
+
     @Test
     public void signedManifestPassesAndTamperingFails() throws Exception {
         KeyPairGenerator generator = KeyPairGenerator.getInstance("RSA");

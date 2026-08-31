@@ -1,4 +1,4 @@
-SPA COACH v0.9.1 - ANDROID + SIGNED OTA BUILD
+SPA COACH v0.9.2 - ANDROID + SIGNED OTA BUILD
 
 OPEN AND BUILD
 1. Open the android folder in Android Studio.
