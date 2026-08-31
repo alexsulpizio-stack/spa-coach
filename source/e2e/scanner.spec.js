@@ -73,4 +73,7 @@ test('synthetic strip photo auto-detects pads and reads chart colors', async ({ 
   await expect(page.locator('#resultRows')).toContainText('5 ppm');
   await expect(page.locator('#resultRows')).toContainText('pH');
   await expect(page.locator('#resultRows')).toContainText('7.2');
+  await expect(page.locator('#resultRows img[alt$="pad color"]')).toHaveCount(6);
+  await page.getByRole('button', { name: 'Review / correct readings' }).click();
+  await expect(page.locator('#readingForm img[alt$="pad color"]')).toHaveCount(6);
 });
