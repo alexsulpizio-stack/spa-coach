@@ -1,0 +1,47 @@
+plugins {
+    id 'com.android.application'
+}
+
+android {
+    namespace = 'com.spacoach.app'
+    compileSdk = 37
+
+    def ciKeystorePath = System.getenv('SPA_COACH_KEYSTORE')
+
+    signingConfigs {
+        if (ciKeystorePath) {
+            ci {
+                storeFile = file(ciKeystorePath)
+                storePassword = System.getenv('SPA_COACH_STORE_PASSWORD')
+                keyAlias = System.getenv('SPA_COACH_KEY_ALIAS')
+                keyPassword = System.getenv('SPA_COACH_KEY_PASSWORD')
+            }
+        }
+    }
+
+    defaultConfig {
+        applicationId = 'com.spacoach.app'
+        minSdk = 26
+        targetSdk = 37
+        versionCode = 72
+        versionName = '0.7.2'
+        buildConfigField 'String', 'UPDATE_MANIFEST_URL', '"https://raw.githubusercontent.com/alexsulpizio-stack/spa-coach/main/update.json"'
+    }
+
+    buildFeatures { buildConfig = true }
+
+    buildTypes {
+        debug {
+            if (ciKeystorePath) signingConfig = signingConfigs.ci
+        }
+    }
+
+    compileOptions {
+        sourceCompatibility = JavaVersion.VERSION_17
+        targetCompatibility = JavaVersion.VERSION_17
+    }
+}
+
+dependencies {
+    implementation 'androidx.core:core:1.19.0'
+}
