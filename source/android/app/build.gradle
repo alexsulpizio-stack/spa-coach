@@ -2,6 +2,17 @@ plugins {
     id 'com.android.application'
 }
 
+def versionSource = file("${rootDir}/../lib/version.js").text
+def versionNameMatch = versionSource =~ /APP_VERSION\s*=\s*['"]([^'"]+)['"]/
+def versionCodeMatch = versionSource =~ /VERSION_CODE\s*=\s*(\d+)/
+if (!versionNameMatch.find() || !versionCodeMatch.find()) {
+    throw new GradleException('Could not read APP_VERSION and VERSION_CODE from source/lib/version.js')
+}
+def spaVersionName = versionNameMatch.group(1)
+def spaVersionCode = versionCodeMatch.group(1).toInteger()
+def webRoot = file("${rootDir}/..")
+def generatedWebAssets = file('src/main/assets/www')
+
 android {
     namespace = 'com.spacoach.app'
     compileSdk = 37
@@ -10,7 +21,7 @@ android {
 
     signingConfigs {
         if (ciKeystorePath) {
-            ci {
+            release {
                 storeFile = file(ciKeystorePath)
                 storePassword = System.getenv('SPA_COACH_STORE_PASSWORD')
                 keyAlias = System.getenv('SPA_COACH_KEY_ALIAS')
@@ -23,16 +34,18 @@ android {
         applicationId = 'com.spacoach.app'
         minSdk = 26
         targetSdk = 37
-        versionCode = 72
-        versionName = '0.7.2'
+        versionCode = spaVersionCode
+        versionName = spaVersionName
         buildConfigField 'String', 'UPDATE_MANIFEST_URL', '"https://raw.githubusercontent.com/alexsulpizio-stack/spa-coach/main/update.json"'
     }
 
     buildFeatures { buildConfig = true }
 
     buildTypes {
-        debug {
-            if (ciKeystorePath) signingConfig = signingConfigs.ci
+        release {
+            minifyEnabled = false
+            shrinkResources = false
+            if (ciKeystorePath) signingConfig = signingConfigs.release
         }
     }
 
@@ -44,4 +57,21 @@ android {
 
 dependencies {
     implementation 'androidx.core:core:1.19.0'
+}
+
+tasks.register('syncWebAssets', Sync) {
+    from(webRoot) {
+        include 'index.html', 'app.js', 'styles.css', 'manifest.webmanifest',
+                'service-worker.js', 'icon.svg', 'icon-192.png',
+                'icon-512.png', 'apple-touch-icon.png'
+    }
+    from("${webRoot}/lib") {
+        into 'lib'
+        include '*.js'
+    }
+    into generatedWebAssets
+}
+
+tasks.named('preBuild').configure {
+    dependsOn tasks.named('syncWebAssets')
 }

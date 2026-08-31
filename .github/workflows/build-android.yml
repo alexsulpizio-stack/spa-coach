@@ -3,7 +3,9 @@ name: Build and publish Spa Coach APK
 on:
   push:
     branches: [main]
-    paths: [spa-coach-android-source.zip]
+    paths:
+      - 'source/**'
+      - '.github/workflows/build-android.yml'
   workflow_dispatch:
 
 permissions:
@@ -24,15 +26,20 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Test web domain logic
+        working-directory: source
+        run: npm test
+
       - uses: android-actions/setup-android@v3
 
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Install Android SDK platform
         run: sdkmanager "platforms;android-37.0" "platform-tools"
-
-      - name: Extract source
-        run: unzip -q spa-coach-android-source.zip -d source
 
       - name: Restore signing key
         shell: bash
@@ -43,8 +50,8 @@ jobs:
       - name: Build signed APK
         working-directory: source/android
         run: |
-          chmod +x gradlew
-          ./gradlew :app:assembleDebug --no-daemon
+          test -x gradlew
+          ./gradlew :app:assembleRelease --no-daemon
         env:
           SPA_COACH_KEYSTORE: ${{ runner.temp }}/spa-coach.keystore
           SPA_COACH_STORE_PASSWORD: ${{ secrets.SPA_COACH_STORE_PASSWORD }}
@@ -54,12 +61,14 @@ jobs:
       - name: Read version and prepare release
         shell: bash
         run: |
-          VERSION=$(sed -n "s/.*versionName = '\([^']*\)'.*/\1/p" source/android/app/build.gradle)
-          CODE=$(sed -n 's/.*versionCode = \([0-9]*\).*/\1/p' source/android/app/build.gradle)
+          VERSION=$(node --input-type=module -e "import('./source/lib/version.js').then(() => process.stdout.write(SpaVersion.APP_VERSION))")
+          CODE=$(node --input-type=module -e "import('./source/lib/version.js').then(() => process.stdout.write(String(SpaVersion.VERSION_CODE)))")
           test -n "$VERSION" && test -n "$CODE"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "CODE=$CODE" >> "$GITHUB_ENV"
-          cp source/android/app/build/outputs/apk/debug/app-debug.apk "Spa-Coach-v${VERSION}-debug.apk"
+          cp source/android/app/build/outputs/apk/release/app-release.apk "Spa-Coach-v${VERSION}.apk"
+          SHA256=$(sha256sum "Spa-Coach-v${VERSION}.apk" | awk '{print $1}')
+          echo "SHA256=$SHA256" >> "$GITHUB_ENV"
 
       - name: Publish GitHub release
         env:
@@ -67,9 +76,9 @@ jobs:
         run: |
           if gh release view "v$VERSION" >/dev/null 2>&1; then
             echo "Release v$VERSION already exists; replacing its APK."
-            gh release upload "v$VERSION" "Spa-Coach-v${VERSION}-debug.apk" --clobber
+            gh release upload "v$VERSION" "Spa-Coach-v${VERSION}.apk" --clobber
           else
-            gh release create "v$VERSION" "Spa-Coach-v${VERSION}-debug.apk" --title "Spa Coach v$VERSION" --notes "Automated signed Spa Coach Android release. Install over the existing app to preserve local data."
+            gh release create "v$VERSION" "Spa-Coach-v${VERSION}.apk" --title "Spa Coach v$VERSION" --notes "Automated signed Spa Coach Android release. Install over the existing app to preserve local data."
           fi
 
       - name: Activate OTA manifest
@@ -79,7 +88,8 @@ jobs:
           {
             "versionCode": $CODE,
             "versionName": "$VERSION",
-            "apkUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/Spa-Coach-v${VERSION}-debug.apk",
+            "apkUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/Spa-Coach-v${VERSION}.apk",
+            "apkSha256": "$SHA256",
             "notes": "Automated Spa Coach Android release v${VERSION}."
           }
           EOF
@@ -92,5 +102,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Spa-Coach-v${{ env.VERSION }}
-          path: Spa-Coach-v${{ env.VERSION }}-debug.apk
+          path: Spa-Coach-v${{ env.VERSION }}.apk
 
