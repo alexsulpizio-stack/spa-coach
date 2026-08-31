@@ -22,7 +22,7 @@ test('manual readings produce conservative treatment guidance',async({page})=>{
   await expect(page.getByText("DON'T USE THE SPA YET")).toBeVisible();
   await page.getByRole('button',{name:'WHAT SHOULD I DO?'}).click();
   await expect(page.getByRole('heading',{name:'Raise free chlorine first'})).toBeVisible();
-  await expect(page.getByText(/0\.29 oz/)).toBeVisible();
+  await expect(page.locator('.treatment-product span')).toContainText('0.29 oz');
 });
 
 test('maintenance settings schedule native reminders',async({page})=>{
