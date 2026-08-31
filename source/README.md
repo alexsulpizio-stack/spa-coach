@@ -1,9 +1,13 @@
-# Spa Coach PHONE v0.6.0
+# Spa Coach PHONE v0.8.0
 
-This upgrade keeps the working v0.3.1 scanner/maintenance loop and adds a native Android shell for real device notifications.
+Spa Coach is a local-first hot-tub water testing and maintenance coach. The browser app and Android WebView use the same canonical web source in this directory.
 
-## New in v0.6.0
+## New in v0.8.0
 
+- Source-first CI and signed release APKs
+- SHA-256 verification before an OTA APK can reach Android's installer
+- Automated tests for chemistry safety, dosing, backups, and reminders
+- Build-time Android asset generation and centralized versioning
 - Maintenance dashboard with due and overdue status
 - Editable stock levels, low-stock alerts, and product label doses
 - Filter replacement reminders and logging
@@ -46,3 +50,13 @@ The scanner, history, chemistry state and saved test-strip images remain local t
 ## Safety
 
 The strip scanner remains experimental and is not a certified water-testing instrument. Spa Coach is intentionally conservative about rejected/uncertain pads and blocks treatment when key chemistry is not reliable enough.
+
+## Development
+
+- Run browser mode with `start_phone.bat`.
+- Run domain tests with `npm test`.
+- Build Android from `android/` with `./gradlew :app:assembleDebug`.
+- Android's `preBuild` task copies the canonical web files and `lib/` modules into generated WebView assets; do not edit `android/app/src/main/assets/www`.
+- Change the app version only in `lib/version.js`.
+
+CI builds directly from this `source/` tree. The old checked-in source ZIP is no longer used.
