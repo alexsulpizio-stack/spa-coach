@@ -395,7 +395,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     if (!sourceImage || !canvas.width || !canvas.height) return null;
     // Geometry does not need full camera resolution. A smaller working image
     // keeps older phones responsive while preserving six-pad spacing.
-    const maxDim=420;
+    const maxDim=180;
     const scale=Math.min(1,maxDim/Math.max(sourceImage.width,sourceImage.height));
     const w=Math.max(1,Math.round(sourceImage.width*scale));
     const h=Math.max(1,Math.round(sourceImage.height*scale));

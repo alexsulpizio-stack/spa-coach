@@ -128,7 +128,7 @@ function detectPadsAlongAxis(mask,width,height,orientation) {
     for(let j=Math.max(0,i-halfWindow);j<=Math.min(minorLength-1,i+halfWindow);j++)sum+=counts[j];
     if(sum>bestSmooth){bestSmooth=sum;bestMinor=i;}
   }
-  if(bestMinor<0)return null;
+  if(bestMinor<0||bestSmooth<=0)return null;
   const bandHalf=Math.max(7,Math.round(minorLength*.027)),bandStart=Math.max(0,bestMinor-bandHalf),bandEnd=Math.min(minorLength-1,bestMinor+bandHalf);
   const fractions=new Float32Array(majorLength),bandWidth=bandEnd-bandStart+1;
   for(let major=0;major<majorLength;major++){
