@@ -65,7 +65,7 @@ final class UpdateSecurity {
             for (int index = 0; index < keys.size(); index++) {
                 if (index > 0) result.append(',');
                 String key = keys.get(index);
-                result.append(JSONObject.quote(key)).append(':').append(canonicalValue(object.get(key)));
+                result.append(quoteJson(key)).append(':').append(canonicalValue(object.get(key)));
             }
             return result.append('}').toString();
         }
@@ -78,9 +78,47 @@ final class UpdateSecurity {
             }
             return result.append(']').toString();
         }
-        if (value instanceof String) return JSONObject.quote((String) value);
+        if (value instanceof String) return quoteJson((String) value);
         if (value instanceof Boolean || value instanceof Number) return value.toString();
         throw new SecurityException("Unsupported manifest value");
+    }
+
+    // Same escaping as Android org.json JSONObject.quote, including solidus.
+    static String quoteJson(String data) {
+        StringBuilder out = new StringBuilder(data.length() + 2);
+        out.append('"');
+        for (int index = 0; index < data.length(); index++) {
+            char character = data.charAt(index);
+            switch (character) {
+                case '"':
+                case '\\':
+                case '/':
+                    out.append('\\').append(character);
+                    break;
+                case '\t':
+                    out.append("\\t");
+                    break;
+                case '\b':
+                    out.append("\\b");
+                    break;
+                case '\n':
+                    out.append("\\n");
+                    break;
+                case '\r':
+                    out.append("\\r");
+                    break;
+                case '\f':
+                    out.append("\\f");
+                    break;
+                default:
+                    if (character < 32) {
+                        out.append(String.format(Locale.ROOT, "\\u%04x", (int) character));
+                    } else {
+                        out.append(character);
+                    }
+            }
+        }
+        return out.append('"').toString();
     }
 
     static PublicKey installedSigningPublicKey(PackageManager manager) throws Exception {

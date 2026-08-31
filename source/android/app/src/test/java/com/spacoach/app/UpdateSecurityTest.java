@@ -1,5 +1,6 @@
 package com.spacoach.app;
 
+import static org.junit.Assert.assertEquals;
 import static org.junit.Assert.assertThrows;
 import static org.junit.Assert.assertTrue;
 
@@ -24,6 +25,26 @@ public class UpdateSecurityTest {
         String second = UpdateSecurity.cacheBustedManifestUrl("https://example.com/update.json?channel=stable", 91, 5678).toString();
         assertTrue(first.endsWith("?installedVersion=91&nonce=1234"));
         assertTrue(second.endsWith("&installedVersion=91&nonce=5678"));
+    }
+
+    @Test
+    public void canonicalPayloadMatchesAndroidJsonQuoteIncludingSolidus() throws Exception {
+        String digest = "a".repeat(64);
+        JSONObject manifest = new JSONObject()
+                .put("versionCode", 93)
+                .put("versionName", "0.9.3")
+                .put("packageName", BuildConfig.APPLICATION_ID)
+                .put("apkUrl", "https://example.com/Spa-Coach.apk")
+                .put("apkSha256", digest)
+                .put("signingCertSha256", digest)
+                .put("notes", "slash/test");
+        String canonical = UpdateSecurity.canonicalPayload(manifest);
+        assertEquals(
+                "{\"apkSha256\":\"" + digest + "\",\"apkUrl\":\"https:\\/\\/example.com\\/Spa-Coach.apk\","
+                        + "\"notes\":\"slash\\/test\",\"packageName\":\"com.spacoach.app\","
+                        + "\"signingCertSha256\":\"" + digest + "\",\"versionCode\":93,\"versionName\":\"0.9.3\"}",
+                canonical
+        );
     }
 
     @Test
