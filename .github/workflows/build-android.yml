@@ -3,7 +3,9 @@ name: Build and publish Spa Coach APK
 on:
   push:
     branches: [main]
-    paths: [spa-coach-android-source.zip]
+    paths:
+      - 'source/**'
+      - '.github/workflows/build-android.yml'
   workflow_dispatch:
 
 permissions:
@@ -24,15 +26,26 @@ jobs:
           distribution: temurin
           java-version: '17'
 
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+
+      - name: Install web test dependencies
+        working-directory: source
+        run: |
+          npm ci
+          npx playwright install chromium --with-deps
+
+      - name: Test web domain logic
+        working-directory: source
+        run: npm test && npm run test:e2e && npm run verify:release
+
       - uses: android-actions/setup-android@v3
 
       - uses: gradle/actions/setup-gradle@v4
 
       - name: Install Android SDK platform
-        run: sdkmanager "platforms;android-37.0" "platform-tools"
-
-      - name: Extract source
-        run: unzip -q spa-coach-android-source.zip -d source
+        run: sdkmanager "platforms;android-37.0" "build-tools;36.0.0" "platform-tools"
 
       - name: Restore signing key
         shell: bash
@@ -43,8 +56,8 @@ jobs:
       - name: Build signed APK
         working-directory: source/android
         run: |
-          chmod +x gradlew
-          ./gradlew :app:assembleDebug --no-daemon
+          test -x gradlew
+          ./gradlew :app:testDebugUnitTest :app:assembleRelease --no-daemon
         env:
           SPA_COACH_KEYSTORE: ${{ runner.temp }}/spa-coach.keystore
           SPA_COACH_STORE_PASSWORD: ${{ secrets.SPA_COACH_STORE_PASSWORD }}
@@ -54,35 +67,51 @@ jobs:
       - name: Read version and prepare release
         shell: bash
         run: |
-          VERSION=$(sed -n "s/.*versionName = '\([^']*\)'.*/\1/p" source/android/app/build.gradle)
-          CODE=$(sed -n 's/.*versionCode = \([0-9]*\).*/\1/p' source/android/app/build.gradle)
+          VERSION=$(node --input-type=module -e "import('./source/lib/version.js').then(() => process.stdout.write(SpaVersion.APP_VERSION))")
+          CODE=$(node --input-type=module -e "import('./source/lib/version.js').then(() => process.stdout.write(String(SpaVersion.VERSION_CODE)))")
           test -n "$VERSION" && test -n "$CODE"
           echo "VERSION=$VERSION" >> "$GITHUB_ENV"
           echo "CODE=$CODE" >> "$GITHUB_ENV"
-          cp source/android/app/build/outputs/apk/debug/app-debug.apk "Spa-Coach-v${VERSION}-debug.apk"
+          cp source/android/app/build/outputs/apk/release/app-release.apk "Spa-Coach-v${VERSION}.apk"
+          SHA256=$(sha256sum "Spa-Coach-v${VERSION}.apk" | awk '{print $1}')
+          echo "SHA256=$SHA256" >> "$GITHUB_ENV"
 
-      - name: Publish GitHub release
+      - name: Prepare signed OTA manifest
+        shell: bash
+        env:
+          SPA_COACH_KEYSTORE: ${{ runner.temp }}/spa-coach.keystore
+          SPA_COACH_STORE_PASSWORD: ${{ secrets.SPA_COACH_STORE_PASSWORD }}
+          SPA_COACH_KEY_ALIAS: ${{ secrets.SPA_COACH_KEY_ALIAS }}
+          SPA_COACH_KEY_PASSWORD: ${{ secrets.SPA_COACH_KEY_PASSWORD }}
+        run: |
+          CERT_SHA256=$(apksigner verify --print-certs "Spa-Coach-v${VERSION}.apk" | sed -n 's/Signer #1 certificate SHA-256 digest: //p' | head -n 1)
+          test -n "$CERT_SHA256"
+          cat > "$RUNNER_TEMP/update-unsigned.json" <<EOF
+          {
+            "versionCode": $CODE,
+            "versionName": "$VERSION",
+            "packageName": "com.spacoach.app",
+            "apkUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/Spa-Coach-v${VERSION}.apk",
+            "apkSha256": "$SHA256",
+            "signingCertSha256": "$CERT_SHA256",
+            "notes": "Automated Spa Coach Android release v${VERSION}."
+          }
+          EOF
+          node source/scripts/canonicalize-update-manifest.mjs "$RUNNER_TEMP/update-unsigned.json" > "$RUNNER_TEMP/update-canonical.json"
+          SIGNATURE=$(java source/scripts/SignManifest.java "$SPA_COACH_KEYSTORE" "$RUNNER_TEMP/update-canonical.json")
+          export SIGNATURE
+          node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1]));m.signature={alg:"RS256",value:process.env.SIGNATURE};fs.writeFileSync("update.json",JSON.stringify(m,null,2)+"\n")' "$RUNNER_TEMP/update-unsigned.json"
+
+      - name: Publish immutable release and activate OTA
+        shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           if gh release view "v$VERSION" >/dev/null 2>&1; then
-            echo "Release v$VERSION already exists; replacing its APK."
-            gh release upload "v$VERSION" "Spa-Coach-v${VERSION}-debug.apk" --clobber
-          else
-            gh release create "v$VERSION" "Spa-Coach-v${VERSION}-debug.apk" --title "Spa Coach v$VERSION" --notes "Automated signed Spa Coach Android release. Install over the existing app to preserve local data."
+            echo "Release v$VERSION already exists. Bump source/lib/version.js before merging."
+            exit 1
           fi
-
-      - name: Activate OTA manifest
-        shell: bash
-        run: |
-          cat > update.json <<EOF
-          {
-            "versionCode": $CODE,
-            "versionName": "$VERSION",
-            "apkUrl": "https://github.com/${GITHUB_REPOSITORY}/releases/download/v${VERSION}/Spa-Coach-v${VERSION}-debug.apk",
-            "notes": "Automated Spa Coach Android release v${VERSION}."
-          }
-          EOF
+          gh release create "v$VERSION" "Spa-Coach-v${VERSION}.apk" --title "Spa Coach v$VERSION" --notes "Automated signed Spa Coach Android release. Install over the existing app to preserve local data."
           git config user.name "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
           git add update.json
@@ -92,5 +121,5 @@ jobs:
       - uses: actions/upload-artifact@v4
         with:
           name: Spa-Coach-v${{ env.VERSION }}
-          path: Spa-Coach-v${{ env.VERSION }}-debug.apk
+          path: Spa-Coach-v${{ env.VERSION }}.apk
 

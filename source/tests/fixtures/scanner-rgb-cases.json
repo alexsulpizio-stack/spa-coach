@@ -1,0 +1,7 @@
+[
+  {"key":"hardness","rgb":[103,64,128],"expected":250,"source":"printed chart"},
+  {"key":"freeChlorine","rgb":[45,18,43],"expected":20,"source":"documented wet prototype"},
+  {"key":"ph","rgb":[148,98,100],"expected":7.8,"source":"documented wet prototype"},
+  {"key":"alkalinity","rgb":[161,137,76],"expected":40,"source":"documented wet prototype"},
+  {"key":"cya","rgb":[132,96,74],"expected":"30–50","source":"documented wet prototype"}
+]

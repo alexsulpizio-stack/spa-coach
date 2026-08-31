@@ -2,5 +2,6 @@
   "versionCode": 72,
   "versionName": "0.7.2",
   "apkUrl": "https://github.com/alexsulpizio-stack/spa-coach/releases/download/v0.7.2/Spa-Coach-v0.7.2-debug.apk",
+  "apkSha256": "96eba13c15883107789faf7dc2598c3505c3baada200373f35282c7ea3bba9b4",
   "notes": "Automated Spa Coach Android release v0.7.2."
 }
