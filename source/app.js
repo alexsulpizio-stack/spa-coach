@@ -393,7 +393,9 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
 
   function autoDetectPads() {
     if (!sourceImage || !canvas.width || !canvas.height) return null;
-    const maxDim=700;
+    // Geometry does not need full camera resolution. A smaller working image
+    // keeps older phones responsive while preserving six-pad spacing.
+    const maxDim=420;
     const scale=Math.min(1,maxDim/Math.max(sourceImage.width,sourceImage.height));
     const w=Math.max(1,Math.round(sourceImage.width*scale));
     const h=Math.max(1,Math.round(sourceImage.height*scale));
@@ -417,7 +419,14 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   }
 
   function runAutoDetection() {
-    const result=autoDetectPads();
+    let result;
+    try {
+      result=autoDetectPads();
+    } catch (error) {
+      console.warn('Automatic pad detection failed',error);
+      enterManualMode('Automatic detection stopped safely. Tap the six pads manually from the tip toward the handle.');
+      return;
+    }
     if (!result || result.confidence==='low') {
       enterManualMode('Automatic detection could not confidently find six pads. Tap them manually from the tip toward the handle.');
       return;

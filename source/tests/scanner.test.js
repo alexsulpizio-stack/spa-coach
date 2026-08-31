@@ -32,3 +32,13 @@ test('vertical six-pad geometry is detected from a deterministic mask',()=>{
   assert.equal(result?.orientation,'vertical');
   assert.ok(['high','medium'].includes(result?.confidence));
 });
+
+test('noisy geometry search has a strict combination budget',()=>{
+  const width=140,height=560,mask=new Uint8Array(width*height);
+  for(const center of Array.from({length:14},(_,index)=>25+index*38)){
+    for(let y=center-7;y<=center+7;y++)for(let x=58;x<=82;x++)mask[y*width+x]=1;
+  }
+  const result=detectPadsAlongAxis(mask,width,height,'vertical');
+  assert.equal(result?.points.length,6);
+  assert.ok(result.searchEvaluations<=250);
+});
