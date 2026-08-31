@@ -502,6 +502,16 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     return `${value}${pad.unit ? ' ' + pad.unit : ''}`;
   }
 
+  function rgbCss(rgb) {
+    return Array.isArray(rgb) ? `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})` : '#ddd';
+  }
+
+  function padColorMarkup(detail, padName) {
+    if (detail?.cropDataUrl) return `<img src="${detail.cropDataUrl}" alt="${escapeHtml(padName)} pad color">`;
+    if (Array.isArray(detail?.rgb)) return `<div class="sample-swatch" style="background:${rgbCss(detail.rgb)}" role="img" aria-label="${escapeHtml(padName)} sampled color"></div>`;
+    return '';
+  }
+
   function renderResults() {
     const readings = state.readings || {};
     const details = state.scan?.details || {};
@@ -509,6 +519,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     list.innerHTML = '';
     PAD_ORDER.forEach(pad => {
       const node = $('resultRowTemplate').content.cloneNode(true);
+      const row = node.querySelector('.result-row');
       node.querySelector('.result-name').textContent = pad.name;
       const d = details[pad.key];
       const conf = !d ? 'manual' : d.invalid ? 'not readable' : d.confidence === 'confirmed' ? 'confirmed' : `${d.confidence} confidence`;
@@ -516,6 +527,12 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
       const val = node.querySelector('.result-value');
       val.textContent = displayValue(pad, readings[pad.key], d);
       val.classList.add((d?.invalid || d?.uncertain) ? 'caution' : classify(pad.key, readings[pad.key]));
+      const photo = padColorMarkup(d, pad.name);
+      const photoSlot = node.querySelector('.result-pad-photo');
+      if (photo) {
+        photoSlot.innerHTML = photo;
+        row.classList.add('has-pad-photo');
+      }
       list.appendChild(node);
     });
 
@@ -538,10 +555,6 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
 
   $('editReadingsBtn').onclick = () => { renderReadingForm(); showScreen('editScreen'); };
 
-  function rgbCss(rgb) {
-    return Array.isArray(rgb) ? `rgb(${rgb[0]}, ${rgb[1]}, ${rgb[2]})` : '#ddd';
-  }
-
   function renderReadingForm() {
     const r = state.readings || {};
     const details = state.scan?.details || {};
@@ -561,10 +574,11 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
           : '';
 
       const alternatives = (d.alternatives || []).slice(0,2);
-      const comparison = (d.invalid || d.uncertain || d.confidence === 'low') && (d.cropDataUrl || alternatives.length)
+      const padPhoto = padColorMarkup(d, pad.name);
+      const comparison = (padPhoto || alternatives.length)
         ? `<div class="pad-compare">
             <div class="pad-photo-box">
-              ${d.cropDataUrl ? `<img src="${d.cropDataUrl}" alt="${escapeHtml(pad.name)} pad crop">` : `<div class="sample-swatch" style="background:${rgbCss(d.rgb)}"></div>`}
+              ${padPhoto || `<div class="sample-swatch" style="background:#ddd"></div>`}
               <span>Your pad</span>
             </div>
             <div class="reference-choices">
@@ -901,7 +915,8 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
         const raw=r[pad.key];
         const shown=displayValue(pad, raw, detail);
         const conf=detail?.invalid ? 'rejected' : detail?.confidence ? detail.confidence : 'legacy';
-        return `<div class="history-reading"><span>${escapeHtml(shortName(pad.key))}</span><strong>${escapeHtml(shown)}</strong><em>${escapeHtml(conf)}</em></div>`;
+        const swatch=padColorMarkup(detail, pad.name);
+        return `<div class="history-reading${swatch?' has-swatch':''}">${swatch}<span>${escapeHtml(shortName(pad.key))}</span><strong>${escapeHtml(shown)}</strong><em>${escapeHtml(conf)}</em></div>`;
       }).join('');
       const photoBlock = h.photoSaved ? `<div class="history-photo-row" data-photo-row="${escapeHtml(h.id)}">
         <button class="history-thumb-btn" data-photo-action="view" data-photo-id="${escapeHtml(h.id)}" aria-label="View saved test photo"><img class="history-thumb" data-photo-thumb="${escapeHtml(h.id)}" alt="Saved test strip thumbnail"></button>
