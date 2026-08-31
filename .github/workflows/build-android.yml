@@ -84,7 +84,7 @@ jobs:
           SPA_COACH_KEY_ALIAS: ${{ secrets.SPA_COACH_KEY_ALIAS }}
           SPA_COACH_KEY_PASSWORD: ${{ secrets.SPA_COACH_KEY_PASSWORD }}
         run: |
-          CERT_SHA256=$(apksigner verify --print-certs "Spa-Coach-v${VERSION}.apk" | sed -n 's/Signer #1 certificate SHA-256 digest: //p' | head -n 1)
+          CERT_SHA256=$("$ANDROID_HOME/build-tools/36.0.0/apksigner" verify --print-certs "Spa-Coach-v${VERSION}.apk" | sed -n 's/Signer #1 certificate SHA-256 digest: //p' | head -n 1)
           test -n "$CERT_SHA256"
           cat > "$RUNNER_TEMP/update-unsigned.json" <<EOF
           {
