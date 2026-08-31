@@ -127,8 +127,15 @@ public class MainActivity extends Activity {
         }
         new Thread(() -> {
             try {
-                URL manifestUrl = requireHttpsUrl(BuildConfig.UPDATE_MANIFEST_URL);
+                URL manifestUrl = requireHttpsUrl(UpdateSecurity.cacheBustedManifestUrl(
+                        BuildConfig.UPDATE_MANIFEST_URL,
+                        BuildConfig.VERSION_CODE,
+                        System.currentTimeMillis()
+                ).toString());
                 HttpURLConnection connection = (HttpURLConnection) manifestUrl.openConnection();
+                connection.setUseCaches(false);
+                connection.setRequestProperty("Cache-Control", "no-cache, no-store, max-age=0");
+                connection.setRequestProperty("Pragma", "no-cache");
                 connection.setConnectTimeout(10000);
                 connection.setReadTimeout(10000);
                 int responseCode = connection.getResponseCode();

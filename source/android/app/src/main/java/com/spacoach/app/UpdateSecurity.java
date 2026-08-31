@@ -10,6 +10,7 @@ import org.json.JSONObject;
 
 import java.io.ByteArrayInputStream;
 import java.io.File;
+import java.net.URL;
 import java.nio.charset.StandardCharsets;
 import java.security.MessageDigest;
 import java.security.PublicKey;
@@ -39,6 +40,11 @@ final class UpdateSecurity {
         if (!verifier.verify(Base64.getDecoder().decode(signature.getString("value")))) {
             throw new SecurityException("Manifest signature mismatch");
         }
+    }
+
+    static URL cacheBustedManifestUrl(String baseUrl, int installedVersion, long nonce) throws Exception {
+        String separator = baseUrl.contains("?") ? "&" : "?";
+        return new URL(baseUrl + separator + "installedVersion=" + installedVersion + "&nonce=" + nonce);
     }
 
     static String canonicalPayload(JSONObject manifest) throws Exception {
