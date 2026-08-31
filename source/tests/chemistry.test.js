@@ -1,0 +1,67 @@
+import test from 'node:test';
+import assert from 'node:assert/strict';
+
+import '../lib/chemistry.js';
+
+const {
+  evaluateSafety,
+  isChemistryConflict,
+  treatmentPlan,
+  unresolvedIssuesFor
+} = globalThis.SpaChemistry;
+
+const inventory = [
+  { id: 'sanitizer', name: 'Test Sanitizer', dosePer500: 0.5 },
+  { id: 'raise', name: 'Test pH Up', dosePer500: 1 },
+  { id: 'lower', name: 'Test pH Down', dosePer500: 0.5 },
+  { id: 'neutralizer', name: 'Test Neutralizer', dosePer500: 0.05 }
+];
+
+test('safety gate accepts only reliable chlorine and pH in range', () => {
+  assert.equal(evaluateSafety({ freeChlorine: 5, ph: 7.4 }).level, 'good');
+  assert.equal(evaluateSafety({ freeChlorine: 2.5, ph: 7.4 }).level, 'bad');
+  assert.equal(evaluateSafety({ freeChlorine: 5, ph: 8 }).level, 'bad');
+  assert.equal(
+    evaluateSafety(
+      { freeChlorine: 5, ph: 7.4 },
+      { freeChlorine: { confidence: 'low' } }
+    ).level,
+    'caution'
+  );
+  assert.equal(evaluateSafety({ freeChlorine: 5, ph: null }).level, 'caution');
+});
+
+test('chemistry conflict rejects total chlorine below free chlorine', () => {
+  assert.equal(isChemistryConflict(1, 3), true);
+  assert.equal(isChemistryConflict(5, 3), false);
+  assert.equal(isChemistryConflict(null, 3), false);
+});
+
+test('treatment plan scales sanitizer dose by spa volume', () => {
+  const plan = treatmentPlan({ freeChlorine: 2, ph: 8.2, alkalinity: 50 }, 290, inventory);
+  assert.equal(plan.focus, 'free chlorine');
+  assert.equal(plan.product, 'Test Sanitizer');
+  assert.match(plan.dose, /0\.29 oz/);
+  assert.equal(plan.retestMinutes, 5);
+});
+
+test('high chlorine uses a conservative half neutralizer dose', () => {
+  const plan = treatmentPlan({ freeChlorine: 12, ph: 7.4 }, 500, inventory);
+  assert.equal(plan.focus, 'free chlorine');
+  assert.equal(plan.product, 'Test Neutralizer');
+  assert.match(plan.dose, /0\.18 oz/);
+});
+
+test('pH correction uses configured inventory dose', () => {
+  const plan = treatmentPlan({ freeChlorine: 5, ph: 8.2 }, 290, inventory);
+  assert.equal(plan.focus, 'pH');
+  assert.equal(plan.product, 'Test pH Down');
+  assert.match(plan.dose, /0\.29 oz/);
+});
+
+test('unresolved issues retain sanitizer-first priority', () => {
+  assert.deepEqual(
+    unresolvedIssuesFor({ freeChlorine: 2, ph: 8.2, alkalinity: 40 }).map(issue => issue.key),
+    ['fc-low', 'ph-high', 'ta-low']
+  );
+});

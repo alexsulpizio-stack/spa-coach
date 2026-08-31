@@ -1,3 +1,16 @@
+const { APP_VERSION } = globalThis.SpaVersion;
+const {
+  classify,
+  evaluateSafety,
+  isChemistryConflict,
+  num,
+  treatmentPlan,
+  unresolvedIssuesFor
+} = globalThis.SpaChemistry;
+const { formatMinutes, makeFollowUp } = globalThis.SpaFollowUp;
+const { futureRelative, maintenanceDue, maintenanceDueAt } = globalThis.SpaReminders;
+const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
+
 (() => {
   'use strict';
 
@@ -141,8 +154,7 @@
   }
   function syncMaintenanceReminder(bridge, key, enabled, lastDone, days, title, body) {
     if (!enabled) { bridge.cancelReminder(key); return; }
-    const base = lastDone ? new Date(lastDone).getTime() : Date.now();
-    bridge.scheduleReminder(key, base + Math.max(1, Number(days) || 1) * 86400000, title, body);
+    bridge.scheduleReminder(key, maintenanceDueAt(lastDone, days), title, body);
   }
   function renderNotificationSettings() {
     const status = $('notificationStatus'), help = $('notificationHelp'), enable = $('enableNotificationsBtn'), test = $('testNotificationBtn');
@@ -175,14 +187,6 @@
     } catch (_) { return structuredClone(defaultState); }
   }
   function saveState() { localStorage.setItem('spaCoachState', JSON.stringify(state)); }
-  function inventoryName(id, fallback) {
-    return state.inventory?.find(item => item.id === id)?.name?.trim() || fallback;
-  }
-  function inventoryDose(id, fallback) {
-    const dose=Number(state.inventory?.find(item => item.id === id)?.dosePer500);
-    return Number.isFinite(dose) && dose > 0 ? dose : fallback;
-  }
-
   // Strip photos are kept in IndexedDB, not localStorage. This keeps binary image
   // data separate from the small JSON state and lets history retain photos locally.
   const PHOTO_DB_NAME = 'SpaCoachPhotoDB';
@@ -217,7 +221,7 @@
     if (!id || !fullBlob) return false;
     const db = await openPhotoDb();
     const tx = db.transaction(PHOTO_STORE, 'readwrite');
-    tx.objectStore(PHOTO_STORE).put({ id, fullBlob, thumbBlob: thumbBlob || fullBlob, at, version:'0.7.2', ...meta });
+    tx.objectStore(PHOTO_STORE).put({ id, fullBlob, thumbBlob: thumbBlob || fullBlob, at, version:APP_VERSION, ...meta });
     await txDone(tx);
     return true;
   }
@@ -772,7 +776,7 @@
     });
 
     state.readings = readings;
-    state.scan = { at: new Date().toISOString(), details, version: '0.7.2', detectionMode: autoDetectionActive ? 'automatic' : 'manual', detection: autoDetectionInfo ? { orientation:autoDetectionInfo.orientation, confidence:autoDetectionInfo.confidence, score:Math.round(autoDetectionInfo.score*10)/10 } : null };
+    state.scan = { at: new Date().toISOString(), details, version: APP_VERSION, detectionMode: autoDetectionActive ? 'automatic' : 'manual', detection: autoDetectionInfo ? { orientation:autoDetectionInfo.orientation, confidence:autoDetectionInfo.confidence, score:Math.round(autoDetectionInfo.score*10)/10 } : null };
     saveState();
     renderResults();
     showScreen('resultsScreen');
@@ -862,24 +866,6 @@
     return Math.min(d, 360-d);
   }
   function deltaE(a,b) { return Math.hypot(a[0]-b[0],a[1]-b[1],a[2]-b[2]); }
-  function num(v) {
-    if (v === null || v === undefined || v === '') return NaN;
-    return typeof v === 'number' ? v : Number(v);
-  }
-
-  function classify(key, value) {
-    const v = num(value);
-    if (!Number.isFinite(v) && key !== 'cya') return 'caution';
-    switch (key) {
-      case 'freeChlorine': return v < 3 || v > 10 ? 'bad' : 'good';
-      case 'ph': return v < 7.0 || v > 7.8 ? 'bad' : (v < 7.2 ? 'caution' : 'good');
-      case 'alkalinity': return v < 80 || v > 140 ? 'caution' : 'good';
-      case 'hardness': return v < 100 || v > 500 ? 'caution' : 'good';
-      case 'cya': return value === 0 || value === '30–50' ? 'good' : 'caution';
-      default: return 'good';
-    }
-  }
-
   function displayValue(pad, value, detail = null) {
     if (value === null || value === undefined || value === '') {
       if (detail?.skipped) return 'Unknown / skipped';
@@ -915,23 +901,12 @@
     const warnings = [];
     const criticalLow = ['freeChlorine','ph'].some(k => ['low','rejected','skipped'].includes(details[k]?.confidence) || details[k]?.invalid || readings[k] == null);
     const tcNow = num(readings.totalChlorine), fcNow = num(readings.freeChlorine);
-    const chemistryConflict = Number.isFinite(tcNow) && Number.isFinite(fcNow) && tcNow < fcNow;
+    const chemistryConflict = isChemistryConflict(tcNow, fcNow);
     $('treatmentBtn').textContent = (criticalLow || chemistryConflict) ? 'REVIEW READINGS FIRST' : 'WHAT SHOULD I DO?';
     if (Object.values(details).some(d => d?.confidence === 'low' || d?.uncertain)) warnings.push('One or more pads are uncertain. Review those values against the bottle chart before relying on them.');
     if (Object.values(details).some(d => d?.reason === 'uneven-pad')) warnings.push('A pad was marked not readable because its center color was too uneven to measure reliably.');
     if (details.totalChlorine?.reason === 'chemistry-conflict' || chemistryConflict) warnings.push('Total chlorine cannot be lower than free chlorine. Correct the reading or mark Total Chlorine Unknown / skip before treatment.');
     $('scanWarnings').innerHTML = warnings.map(w=>`<div class="callout warn-callout">⚠️ ${w}</div>`).join('');
-  }
-
-  function evaluateSafety(r, details = {}) {
-    const fc = num(r.freeChlorine), ph = num(r.ph);
-    const criticalUncertain = ['freeChlorine','ph'].some(k => details[k]?.invalid || ['low','rejected'].includes(details[k]?.confidence) || r[k] == null);
-    if (criticalUncertain) return { level:'caution', title:'VERIFY BEFORE USING THE SPA', reason:'Chlorine or pH is not reliable enough yet.' };
-    if (!Number.isFinite(fc) || !Number.isFinite(ph)) return { level:'caution', title:'MORE INFORMATION NEEDED', reason:'A chlorine and pH reading are required.' };
-    if (fc < 3) return { level:'bad', title:"DON'T USE THE SPA YET", reason:`Free chlorine is ${fc} ppm — below the use range.` };
-    if (fc > 10) return { level:'bad', title:"DON'T USE THE SPA YET", reason:`Free chlorine is ${fc} ppm — above the 3–10 ppm use range.` };
-    if (ph < 7.0 || ph > 7.8) return { level:'bad', title:"DON'T USE THE SPA YET", reason:`pH is ${ph}, outside the 7.0–7.8 use range.` };
-    return { level:'good', title:'WATER IS IN THE USE RANGE', reason:'Free chlorine and pH are both in range.' };
   }
 
   $('editReadingsBtn').onclick = () => { renderReadingForm(); showScreen('editScreen'); };
@@ -1023,7 +998,7 @@
     if (!validation || !saveBtn) return;
     const { r, incompleteRejected } = reviewFormValues();
     const tc = num(r.totalChlorine), fc = num(r.freeChlorine);
-    const conflict = Number.isFinite(tc) && Number.isFinite(fc) && tc < fc;
+    const conflict = isChemistryConflict(tc, fc);
 
     let msg = '';
     if (incompleteRejected) {
@@ -1067,7 +1042,7 @@
     });
 
     const tc = num(r.totalChlorine), fc = num(r.freeChlorine);
-    if (Number.isFinite(tc) && Number.isFinite(fc) && tc < fc) {
+    if (isChemistryConflict(tc, fc)) {
       validateReviewForm();
       return;
     }
@@ -1080,13 +1055,13 @@
     const details = state.scan?.details || {};
     const criticalLow = ['freeChlorine','ph'].some(k => ['low','rejected','skipped'].includes(details[k]?.confidence) || details[k]?.invalid || state.readings?.[k] == null);
     const tc = num(state.readings?.totalChlorine), fc = num(state.readings?.freeChlorine);
-    const chemistryConflict = Number.isFinite(tc) && Number.isFinite(fc) && tc < fc;
+    const chemistryConflict = isChemistryConflict(tc, fc);
     if (criticalLow || chemistryConflict) { renderReadingForm(); showScreen('editScreen'); return; }
     renderTreatment(); showScreen('treatmentScreen');
   };
 
   function renderTreatment() {
-    const plan = treatmentPlan(state.readings || {}, state.profile.volume);
+    const plan = treatmentPlan(state.readings || {}, state.profile.volume, state.inventory);
     state.currentPlan = plan;
     const c = $('treatmentContent');
     const configurableRetest = plan.retestMode === 'configurable';
@@ -1137,128 +1112,14 @@
     }
   }
 
-  function treatmentPlan(r, gallons) {
-    const fc=num(r.freeChlorine), ph=num(r.ph), ta=num(r.alkalinity);
-    const scale = gallons / 500;
-    const spa56Regular=(inventoryDose('sanitizer',0.5)*scale).toFixed(2);
-    const spaUpNormal=(inventoryDose('raise',1)*scale).toFixed(2);
-    const spaUpLow=(inventoryDose('raise',1)*2*scale).toFixed(2);
-    const phDownDose=(inventoryDose('lower',0.5)*scale).toFixed(2);
-
-    if (Number.isFinite(fc) && fc > 10) {
-      const reduction=Math.max(0,fc-5);
-      const calculatedDose=inventoryDose('neutralizer',0.05)*scale*reduction;
-      const startingDose=calculatedDose/2;
-      return {
-        action:'dose', focus:'free chlorine', followUpTitle:'Retest free chlorine', retestMinutes:60,
-        title:'High chlorine: wait, or optionally neutralize',
-        explanation:`Free chlorine is ${fc} ppm, above the app's 3–10 ppm use range. Waiting uncovered with circulation is the default. Neutralizer is an optional faster correction.`,
-        product:inventoryName('neutralizer','AquaDoc Chlorine Neutralizer'),
-        dose:`Conservative starting dose for ${gallons} gal: about ${startingDose.toFixed(2)} oz (${(startingDose*28.3495).toFixed(1)} g). This is half the calculated amount to approach 5 ppm.`,
-        steps:['Do not use the hot tub while free chlorine is above 10 ppm.','Confirm the reading with a fresh strip and remove any chlorine feeder.',`If choosing neutralizer, weigh about ${startingDose.toFixed(2)} oz (${(startingDose*28.3495).toFixed(1)} g) and add it according to the label with circulation running.`,'Wait 1 hour and retest before adding any more.','Alternatively, add nothing, leave the cover open safely, circulate, and let chlorine fall naturally.'],
-        note:'Never mix spa chemicals. Spa Coach uses AquaDoc’s published guide of about 1 oz per 1 ppm per 10,000 gallons, then starts at half the calculated dose because strips and water volume are approximate.'
-      };
-    }
-    if (Number.isFinite(fc) && fc < 3) return {
-      action:'dose', focus:'free chlorine', followUpTitle:'Retest free chlorine', retestMinutes:5,
-      title:'Raise free chlorine first',
-      explanation:`Free chlorine is ${fc} ppm. Correct sanitizer before adjusting the secondary water-balance readings.`,
-      product:inventoryName('sanitizer', 'Leisure Time Spa 56'), dose:`Label-scaled regular dose for ${gallons} gal: about ${spa56Regular} oz`,
-      steps:[`Measure about ${spa56Regular} oz of Spa 56.`,'Add it according to the product label with circulation running.','Circulate for 5 minutes.','Retest free chlorine before using the spa or adding more.'],
-      note:'The app scales the bottle’s ½ oz per 500 gal regular dose. Confirm the product label if your formulation changes.'
-    };
-    if (Number.isFinite(ph) && ph > 7.8) return {
-      action:'dose', focus:'pH', followUpTitle:'Retest pH and alkalinity', retestMinutes:30,
-      title:'Lower pH', explanation:`pH is ${ph}, above the desired range.`,
-      product:'SpaChoice pH Decreaser', dose:'Start with 0.5 oz, per the bottle’s incremental-dose directions',
-      steps:['Turn on the blower or filter.','Premix 0.5 oz of product with water in a plastic pail.','Add the diluted product to the spa.','Wait 30 minutes and retest.','Do not exceed 1 oz at one time.'],
-      note:'This product can also lower total alkalinity, so retest both before another dose.'
-    };
-    if (Number.isFinite(ph) && ph < 7.2) {
-      const veryLow = ph < 6.8;
-      const dose = veryLow ? spaUpLow : spaUpNormal;
-      return {
-        action:'dose', focus:'pH', followUpTitle:'Retest pH and alkalinity', retestMinutes:60,
-        title:'Raise pH', explanation:`pH is ${ph}.`, product:inventoryName('raise', 'Leisure Time Spa Up'),
-        dose:`Label-scaled dose for ${gallons} gal: about ${dose} oz`,
-        steps:[`Measure about ${dose} oz of Spa Up.`,'Add it according to the product label.','Circulate the water.','Retest before adding another dose.'],
-        note:'Spa Up also affects total alkalinity, which is why the app retests instead of calculating a large one-shot correction.'
-      };
-    }
-    if (Number.isFinite(ta) && ta < 80) return {
-      action:'advice', focus:'total alkalinity', followUpTitle:'Confirm low alkalinity', retestMinutes:null,
-      title:'Sanitizer and pH look okay; alkalinity is low',
-      explanation:`Total alkalinity is ${ta} ppm. Your current inventory does not include a dedicated alkalinity increaser.`,
-      product:null, dose:'',
-      steps:['Do not add more chlorine just for this reading.','Do not use pH increaser solely to chase alkalinity if pH is already in range.','Confirm the alkalinity reading with a fresh strip before buying or dosing another product.'],
-      note:'Spa Coach will remember the low alkalinity while you work through higher-priority sanitizer and pH issues first.'
-    };
-    if (Number.isFinite(ta) && ta > 140) return {
-      action:'advice', focus:'total alkalinity', followUpTitle:'Confirm high alkalinity', retestMinutes:null,
-      title:'Alkalinity is elevated', explanation:`Total alkalinity is ${ta} ppm.`, product:null, dose:'',
-      steps:['Retest to confirm the reading.','Watch pH; high alkalinity can make pH harder to control.','Avoid adding Spa Up while alkalinity is high.'],
-      note:'The app will prioritize a pH correction if pH also rises above range.'
-    };
-    return {
-      action:'none', focus:null, followUpTitle:null, retestMinutes:null,
-      title:'No chemical adjustment is the first priority',
-      explanation:'Free chlorine and pH are in the app’s use range, and no higher-priority correction is indicated by these readings.',
-      product:null, dose:'', steps:['Log this test.','Retest before your next soak or whenever water conditions change.'],
-      note:'Test-strip readings are approximate; confirm anything that looks inconsistent with the bottle chart.'
-    };
-  }
-
-  function unresolvedIssuesFor(r) {
-    const issues = [];
-    const fc=num(r?.freeChlorine), ph=num(r?.ph), ta=num(r?.alkalinity);
-    if (Number.isFinite(fc) && fc > 10) issues.push({ key:'fc-high', label:`Free chlorine high (${fc} ppm)`, focus:'free chlorine', priority:1 });
-    else if (Number.isFinite(fc) && fc < 3) issues.push({ key:'fc-low', label:`Free chlorine low (${fc} ppm)`, focus:'free chlorine', priority:1 });
-    if (Number.isFinite(ph) && ph > 7.8) issues.push({ key:'ph-high', label:`pH high (${ph})`, focus:'pH', priority:2 });
-    else if (Number.isFinite(ph) && ph < 7.2) issues.push({ key:'ph-low', label:`pH low (${ph})`, focus:'pH', priority:2 });
-    if (Number.isFinite(ta) && ta < 80) issues.push({ key:'ta-low', label:`Alkalinity low (${ta} ppm)`, focus:'total alkalinity', priority:3 });
-    else if (Number.isFinite(ta) && ta > 140) issues.push({ key:'ta-high', label:`Alkalinity high (${ta} ppm)`, focus:'total alkalinity', priority:3 });
-    return issues.sort((a,b)=>a.priority-b.priority);
-  }
-
-  function formatMinutes(minutes) {
-    const m = Number(minutes);
-    if (!Number.isFinite(m) || m <= 0) return 'later';
-    if (m < 60) return `${m} min`;
-    if (m === 60) return '1 hour';
-    if (m < 1440 && m % 60 === 0) return `${m/60} hours`;
-    if (m === 1440) return '1 day';
-    return `${Math.round(m/60)} hours`;
-  }
-
   function selectedRetestDelay(plan) {
     const select = $('retestDelaySelect');
     if (select) return Math.max(0, Number(select.value) || 0);
     return Number.isFinite(plan?.retestMinutes) ? plan.retestMinutes : null;
   }
 
-  function makeFollowUp(id, at, plan, issues, options={}) {
-    if (!plan || plan.action === 'none') return null;
-    const delay = options.delayMinutes;
-    const treatmentSkipped = Boolean(options.treatmentSkipped);
-    if (treatmentSkipped && plan.action === 'dose') {
-      return {
-        sourceTestId:id, createdAt:at, dueAt:null, kind:'action',
-        title:`Still needs attention: ${plan.title}`, focus:plan.focus || 'water chemistry',
-        reason:'The test was logged, but the recommended treatment was not marked complete.',
-        unresolvedIssues:issues
-      };
-    }
-    const dueAt = Number.isFinite(delay) && delay > 0 ? new Date(new Date(at).getTime() + delay*60000).toISOString() : null;
-    return {
-      sourceTestId:id, createdAt:at, dueAt, kind:'retest',
-      title:plan.followUpTitle || 'Retest water', focus:plan.focus || 'water chemistry',
-      reason:plan.action === 'wait' ? 'Waiting before making another adjustment.' : plan.action === 'dose' ? 'Confirm the water response before another dose.' : 'Confirm the reading before the next adjustment.',
-      unresolvedIssues:issues
-    };
-  }
-
   $('logTreatmentBtn').onclick = async () => {
-    const plan = state.currentPlan || treatmentPlan(state.readings || {}, state.profile.volume);
+    const plan = state.currentPlan || treatmentPlan(state.readings || {}, state.profile.volume, state.inventory);
     const delay = selectedRetestDelay(plan);
     const treatmentDone = plan.action === 'dose';
     const photoSaved = await logCurrentTest(plan, treatmentDone, { createFollowUp: plan.action !== 'none', delayMinutes: delay });
@@ -1267,7 +1128,7 @@
   };
 
   $('skipTreatmentBtn').onclick = async () => {
-    const plan = state.currentPlan || treatmentPlan(state.readings || {}, state.profile.volume);
+    const plan = state.currentPlan || treatmentPlan(state.readings || {}, state.profile.volume, state.inventory);
     if (plan.action === 'wait') {
       const hadPhoto = Boolean(currentPhotoFullBlob);
       const photoSaved = await logCurrentTest(plan, false, { createFollowUp:true, delayMinutes:0 });
@@ -1561,7 +1422,7 @@
   async function buildFullBackup() {
     const photos=await getAllPhotoRecords(), encoded=[];
     for(const photo of photos) encoded.push({...photo,fullBlob:await blobToDataUrl(photo.fullBlob),thumbBlob:await blobToDataUrl(photo.thumbBlob||photo.fullBlob)});
-    const payload={format:'spa-coach-full-backup',version:3,createdAt:new Date().toISOString(),state,photos:encoded};
+    const payload=buildBackupPayload(state, encoded);
     return {json:JSON.stringify(payload),filename:`spa-coach-backup-${new Date().toISOString().slice(0,10)}.json`,count:encoded.length};
   }
   $('fullBackupBtn').onclick=async()=>{
@@ -1589,7 +1450,7 @@
     const status=$('backupStatus');
     try {
       const payload=JSON.parse(await file.text());
-      if(payload.format!=='spa-coach-full-backup'||!payload.state||!Array.isArray(payload.photos))throw new Error('invalid');
+      validateBackupPayload(payload);
       if(!confirm(`Restore this backup from ${formatDateTime(payload.createdAt)}? Current Spa Coach data will be replaced.`))return;
       await clearPhotoRecords();
       for(const photo of payload.photos) await putPhotoRecord(photo.id,dataUrlToBlob(photo.fullBlob),dataUrlToBlob(photo.thumbBlob),photo.at,photo.meta||{});
@@ -1605,7 +1466,7 @@
     $('sanitizerInput').value=state.profile.sanitizer;
     const installedVersion = $('installedVersion');
     if (installedVersion) {
-      let version = '0.7.2';
+      let version = APP_VERSION;
       try { version = nativeBridge()?.getAppVersion?.() || version; } catch (_) {}
       installedVersion.textContent = `PHONE v${version}`;
       if ($('headerVersion')) $('headerVersion').textContent = `PHONE v${version}`;
@@ -1700,18 +1561,10 @@
   }
   function maintenanceStatus(lastDone, days, label) {
     if (!lastDone) return `No ${label} logged yet. Reminder begins when you log one.`;
-    const due=new Date(lastDone).getTime()+Math.max(1,Number(days)||1)*86400000;
+    const due=maintenanceDueAt(lastDone, days);
     const remaining=due-Date.now();
     if (remaining<=0) return `${label[0].toUpperCase()+label.slice(1)} is due now · last logged ${formatDate(lastDone)}.`;
     return `Last logged ${formatDate(lastDone)} · next due ${formatDate(new Date(due).toISOString())}.`;
-  }
-  function maintenanceDue(lastDone, days) {
-    if (!lastDone) return {label:'Not started',level:'neutral'};
-    const due=new Date(lastDone).getTime()+Math.max(1,Number(days)||1)*86400000;
-    const daysLeft=Math.ceil((due-Date.now())/86400000);
-    if(daysLeft<0)return {label:`Overdue by ${Math.abs(daysLeft)} day${Math.abs(daysLeft)===1?'':'s'}`,level:'bad'};
-    if(daysLeft===0)return {label:'Due today',level:'caution'};
-    return {label:`Due in ${daysLeft} day${daysLeft===1?'':'s'}`,level:daysLeft<=2?'caution':'good'};
   }
   function renderMaintenanceDashboard() {
     const el=$('maintenanceDashboard'); if(!el)return;
@@ -1724,25 +1577,6 @@
     const low=(state.inventory||[]).filter(i=>Number(i.quantity)<=Number(i.lowAt));
     el.innerHTML=items.map(([name,enabled,due])=>`<div class="maintenance-tile ${enabled?due.level:'neutral'}"><strong>${escapeHtml(name)}</strong><span>${enabled?escapeHtml(due.label):'Reminder off'}</span></div>`).join('')+
       `<div class="maintenance-tile ${low.length?'caution':'good'}"><strong>Chemical stock</strong><span>${low.length?`${low.length} low: ${low.map(i=>escapeHtml(i.name)).join(', ')}`:'Stock levels look good'}</span></div>`;
-  }
-  function futureRelative(iso) {
-    if (!iso) return 'No timer set';
-    const ms = new Date(iso).getTime() - Date.now();
-    if (ms <= -60000) {
-      const overdueMin = Math.floor(Math.abs(ms)/60000);
-      if (overdueMin < 60) return `Overdue by ${overdueMin} min`;
-      const overdueHr = Math.floor(overdueMin/60), rem = overdueMin % 60;
-      return rem ? `Overdue by ${overdueHr} hr ${rem} min` : `Overdue by ${overdueHr} hr`;
-    }
-    if (ms <= 0) return 'Due now';
-    const min = Math.ceil(ms/60000);
-    if (min < 60) return `Retest in ${min} min`;
-    if (min < 1440) {
-      const h = Math.floor(min/60), rem = min % 60;
-      return rem ? `Retest in ${h} hr ${rem} min` : `Retest in ${h} hr`;
-    }
-    const d = Math.ceil(min/1440);
-    return `Retest in ${d} day${d===1?'':'s'}`;
   }
   function formatDate(iso) { return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',year:'numeric'}).format(new Date(iso)); }
   function formatDateTime(iso) { return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(iso)); }
@@ -1771,7 +1605,7 @@
   };
 
   if ('serviceWorker' in navigator && window.isSecureContext) {
-    navigator.serviceWorker.register('./service-worker.js?v=0.7.2').catch(() => {});
+    navigator.serviceWorker.register('./service-worker.js').catch(() => {});
   }
 
   syncNativeReminder();
@@ -1783,7 +1617,7 @@
     }
   } catch (_) {}
   try {
-    const version = nativeBridge()?.getAppVersion?.() || '0.7.2';
+    const version = nativeBridge()?.getAppVersion?.() || APP_VERSION;
     if ($('headerVersion')) $('headerVersion').textContent = `PHONE v${version}`;
     document.title = `Spa Coach PHONE v${version}`;
   } catch (_) {}
