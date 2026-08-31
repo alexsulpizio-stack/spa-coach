@@ -3,6 +3,15 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test tests/*.test.js"
+    "test": "node --test tests/*.test.js",
+    "verify:version": "node scripts/verify-version.mjs",
+    "verify:release": "node scripts/verify-version.mjs --release",
+    "serve": "node scripts/static-server.mjs",
+    "test:e2e": "playwright test",
+    "test:a11y": "playwright test e2e/a11y.spec.js"
+  },
+  "devDependencies": {
+    "@axe-core/playwright": "^4.13.0",
+    "@playwright/test": "^1.62.1"
   }
 }
