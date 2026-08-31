@@ -132,6 +132,7 @@ public class MainActivity extends Activity {
                 connection.setConnectTimeout(10000);
                 connection.setReadTimeout(10000);
                 int responseCode = connection.getResponseCode();
+                if (!"https".equalsIgnoreCase(connection.getURL().getProtocol())) throw new SecurityException("Insecure manifest redirect");
                 if (responseCode < 200 || responseCode >= 300) throw new IOException("Update manifest returned HTTP " + responseCode);
                 StringBuilder json = new StringBuilder();
                 try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
@@ -185,6 +186,7 @@ public class MainActivity extends Activity {
         connection.setReadTimeout(30000);
         try {
             int responseCode = connection.getResponseCode();
+            if (!"https".equalsIgnoreCase(connection.getURL().getProtocol())) throw new SecurityException("Insecure APK redirect");
             if (responseCode < 200 || responseCode >= 300) throw new IOException("APK download returned HTTP " + responseCode);
             long advertisedLength = connection.getContentLengthLong();
             if (advertisedLength > MAX_APK_BYTES) throw new IOException("APK is too large");
