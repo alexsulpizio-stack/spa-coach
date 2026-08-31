@@ -1,6 +1,10 @@
-# Spa Coach PHONE v0.9.2
+# Spa Coach PHONE v0.9.3
 
 Spa Coach is a local-first hot-tub water testing and maintenance coach. The browser app and Android WebView use the same canonical web source in this directory.
+
+## New in v0.9.3
+
+- OTA manifest signatures use Android JSON quoting so Check for Updates can verify GitHub-published APKs
 
 ## New in v0.9.2
 
