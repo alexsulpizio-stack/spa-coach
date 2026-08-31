@@ -11,6 +11,7 @@ import android.net.Uri;
 import android.os.Build;
 import android.os.Bundle;
 import android.provider.MediaStore;
+import android.provider.Settings;
 import android.webkit.ValueCallback;
 import android.webkit.WebChromeClient;
 import android.webkit.WebSettings;
@@ -22,12 +23,16 @@ import androidx.core.content.FileProvider;
 import java.io.File;
 import java.io.IOException;
 import java.io.BufferedReader;
+import java.io.InputStream;
 import java.io.InputStreamReader;
 import java.io.OutputStream;
 import java.io.FileOutputStream;
 import java.nio.charset.StandardCharsets;
 import java.net.HttpURLConnection;
 import java.net.URL;
+import java.security.MessageDigest;
+import java.util.Locale;
+import java.util.concurrent.atomic.AtomicBoolean;
 import org.json.JSONObject;
 
 public class MainActivity extends Activity {
@@ -41,6 +46,10 @@ public class MainActivity extends Activity {
     private String pendingLaunchAction;
     private boolean pageReady = false;
     private String pendingBackupJson;
+    private final AtomicBoolean updateCheckInProgress = new AtomicBoolean(false);
+
+    private static final long MAX_APK_BYTES = 200L * 1024L * 1024L;
+    private static final String APK_MIME_TYPE = "application/vnd.android.package-archive";
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -112,27 +121,116 @@ public class MainActivity extends Activity {
     void checkForUpdates() { checkForUpdates(true); }
 
     void checkForUpdates(boolean openDownload) {
+        if (!updateCheckInProgress.compareAndSet(false, true)) {
+            if (openDownload) sendUpdateStatus("An update check is already running.");
+            return;
+        }
         new Thread(() -> {
             try {
-                if (BuildConfig.UPDATE_MANIFEST_URL.contains("example.invalid")) {
-                    sendUpdateStatus("OTA is ready, but its HTTPS update address must be configured before publishing.");
-                    return;
+                URL manifestUrl = requireHttpsUrl(BuildConfig.UPDATE_MANIFEST_URL);
+                HttpURLConnection connection = (HttpURLConnection) manifestUrl.openConnection();
+                connection.setConnectTimeout(10000);
+                connection.setReadTimeout(10000);
+                int responseCode = connection.getResponseCode();
+                if (responseCode < 200 || responseCode >= 300) throw new IOException("Update manifest returned HTTP " + responseCode);
+                StringBuilder json = new StringBuilder();
+                try (BufferedReader reader = new BufferedReader(new InputStreamReader(connection.getInputStream(), StandardCharsets.UTF_8))) {
+                    String line;
+                    while ((line = reader.readLine()) != null) json.append(line);
+                } finally {
+                    connection.disconnect();
                 }
-                HttpURLConnection connection=(HttpURLConnection)new URL(BuildConfig.UPDATE_MANIFEST_URL).openConnection();
-                connection.setConnectTimeout(10000); connection.setReadTimeout(10000);
-                BufferedReader reader=new BufferedReader(new InputStreamReader(connection.getInputStream()));
-                StringBuilder json=new StringBuilder(); String line;
-                while((line=reader.readLine())!=null) json.append(line);
                 JSONObject update=new JSONObject(json.toString());
                 int versionCode=update.getInt("versionCode");
                 if(versionCode<=BuildConfig.VERSION_CODE) { sendUpdateStatus("Spa Coach is up to date (v"+BuildConfig.VERSION_NAME+")."); return; }
                 String versionName=update.optString("versionName","new version");
                 String apkUrl=update.getString("apkUrl");
-                sendUpdateStatus("Spa Coach v"+versionName+" is available. Opening the secure download…");
-                if (openDownload) runOnUiThread(() -> startActivity(new Intent(Intent.ACTION_VIEW, Uri.parse(apkUrl))));
-                else sendUpdateStatus("Spa Coach v"+versionName+" is available. Open Settings and tap Check for Updates.");
-            } catch(Exception error) { sendUpdateStatus("Could not check for updates. Check your connection and try again."); }
+                String apkSha256=update.getString("apkSha256");
+                if (!openDownload) {
+                    sendUpdateStatus("Spa Coach v"+versionName+" is available. Open Settings and tap Check for Updates.");
+                    return;
+                }
+                sendUpdateStatus("Downloading Spa Coach v"+versionName+" for verification…");
+                File verifiedApk = downloadVerifiedApk(apkUrl, apkSha256);
+                sendUpdateStatus("Update verified. Opening Android installer…");
+                runOnUiThread(() -> promptInstallVerifiedApk(verifiedApk));
+            } catch(SecurityException error) {
+                sendUpdateStatus("Update verification failed. The APK was not opened.");
+            } catch(Exception error) {
+                sendUpdateStatus("Could not check or download the update. Check your connection and try again.");
+            } finally {
+                updateCheckInProgress.set(false);
+            }
         }).start();
+    }
+
+    private URL requireHttpsUrl(String value) throws Exception {
+        URL url = new URL(value);
+        if (!"https".equalsIgnoreCase(url.getProtocol())) throw new SecurityException("Update URLs must use HTTPS");
+        return url;
+    }
+
+    private File downloadVerifiedApk(String apkUrl, String expectedSha256) throws Exception {
+        String expected = expectedSha256 == null ? "" : expectedSha256.trim().toLowerCase(Locale.ROOT);
+        if (!expected.matches("[0-9a-f]{64}")) throw new SecurityException("Invalid APK checksum");
+
+        File updateDirectory = new File(getCacheDir(), "updates");
+        if (!updateDirectory.exists() && !updateDirectory.mkdirs()) throw new IOException("Could not create update directory");
+        File partial = new File(updateDirectory, "spa-coach-update.apk.part");
+        File verified = new File(updateDirectory, "spa-coach-update.apk");
+        partial.delete();
+
+        HttpURLConnection connection = (HttpURLConnection) requireHttpsUrl(apkUrl).openConnection();
+        connection.setConnectTimeout(15000);
+        connection.setReadTimeout(30000);
+        try {
+            int responseCode = connection.getResponseCode();
+            if (responseCode < 200 || responseCode >= 300) throw new IOException("APK download returned HTTP " + responseCode);
+            long advertisedLength = connection.getContentLengthLong();
+            if (advertisedLength > MAX_APK_BYTES) throw new IOException("APK is too large");
+
+            MessageDigest digest = MessageDigest.getInstance("SHA-256");
+            long total = 0;
+            try (InputStream input = connection.getInputStream(); FileOutputStream output = new FileOutputStream(partial)) {
+                byte[] buffer = new byte[64 * 1024];
+                int read;
+                while ((read = input.read(buffer)) != -1) {
+                    total += read;
+                    if (total > MAX_APK_BYTES) throw new IOException("APK is too large");
+                    digest.update(buffer, 0, read);
+                    output.write(buffer, 0, read);
+                }
+            }
+            if (total == 0) throw new IOException("APK download was empty");
+
+            StringBuilder actual = new StringBuilder(64);
+            for (byte value : digest.digest()) actual.append(String.format(Locale.ROOT, "%02x", value & 0xff));
+            if (!MessageDigest.isEqual(
+                    actual.toString().getBytes(StandardCharsets.US_ASCII),
+                    expected.getBytes(StandardCharsets.US_ASCII))) {
+                throw new SecurityException("APK checksum mismatch");
+            }
+            if (verified.exists() && !verified.delete()) throw new IOException("Could not replace old update");
+            if (!partial.renameTo(verified)) throw new IOException("Could not finalize update");
+            return verified;
+        } finally {
+            connection.disconnect();
+            if (partial.exists()) partial.delete();
+        }
+    }
+
+    private void promptInstallVerifiedApk(File apk) {
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O && !getPackageManager().canRequestPackageInstalls()) {
+            sendUpdateStatus("Allow Spa Coach to install updates, then tap Check for Updates again.");
+            startActivity(new Intent(Settings.ACTION_MANAGE_UNKNOWN_APP_SOURCES, Uri.parse("package:" + getPackageName())));
+            return;
+        }
+        Uri uri = FileProvider.getUriForFile(this, getPackageName() + ".fileprovider", apk);
+        Intent install = new Intent(Intent.ACTION_VIEW);
+        install.setDataAndType(uri, APK_MIME_TYPE);
+        install.setClipData(ClipData.newRawUri("Verified Spa Coach update", uri));
+        install.addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION);
+        startActivity(install);
     }
 
     private void sendUpdateStatus(String message) {
