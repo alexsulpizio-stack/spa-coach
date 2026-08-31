@@ -18,6 +18,9 @@
 body { margin: 0; background: var(--bg); color: var(--text); font-family: Inter, ui-sans-serif, system-ui, -apple-system, BlinkMacSystemFont, "Segoe UI", sans-serif; }
 button, input, select { font: inherit; }
 button { cursor: pointer; }
+.skip-link { position:fixed; left:16px; top:-80px; z-index:1000; padding:12px 16px; border-radius:10px; background:var(--primary-dark); color:#fff; font-weight:800; }
+.skip-link:focus { top:16px; }
+:focus-visible { outline:3px solid #f2a900; outline-offset:3px; }
 .app-shell { max-width: 720px; margin: 0 auto; min-height: 100vh; padding: max(18px, env(safe-area-inset-top)) 16px max(36px, env(safe-area-inset-bottom)); }
 .topbar { display:flex; align-items:center; justify-content:space-between; margin-bottom:16px; }
 h1,h2,h3,p { margin-top:0; }
@@ -108,7 +111,7 @@ h3 { margin-bottom:5px; }
 
 /* v0.2 scan confidence + full history */
 .use-status-detail { margin-top:6px; font-size:13px; font-weight:700; line-height:1.35; opacity:.86; }
-.verify-note { display:block; margin-top:3px; color:var(--warn); font-size:10px; font-weight:650; line-height:1.25; }
+.verify-note { display:block; margin-top:3px; color:var(--warn); font-size:12px; font-weight:650; line-height:1.35; }
 .history-entry.good { border-left:4px solid var(--good); }
 .history-entry.caution { border-left:4px solid var(--warn); }
 .history-entry.bad { border-left:4px solid var(--bad); }
@@ -136,7 +139,7 @@ button:disabled { opacity:.48; cursor:not-allowed; }
 .reference-choice:active { transform:scale(.98); }
 .reference-swatch { width:28px; height:28px; border-radius:7px; border:1px solid rgba(0,0,0,.14); grid-row:1 / span 2; }
 .reference-choice strong { font-size:11px; line-height:1.15; }
-.reference-choice small { color:var(--muted); font-size:9px; }
+.reference-choice small { color:var(--muted); font-size:12px; }
 @media (max-width:420px) {
   .reading-edit-row { grid-template-columns:1fr; }
   .pad-compare { grid-template-columns:78px 1fr; }
@@ -219,3 +222,6 @@ button:disabled { opacity:.48; cursor:not-allowed; }
 .backup-status { margin-top:10px; line-height:1.4; }
 @media (max-width:680px) { .inventory-edit-row { grid-template-columns:1fr 1fr; } .inventory-edit-row button { justify-self:start; } }
 @media (max-width:420px) { .maintenance-dashboard,.inventory-edit-row { grid-template-columns:1fr; } }
+@media (prefers-reduced-motion:reduce) {
+  *,*::before,*::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; scroll-behavior:auto !important; }
+}

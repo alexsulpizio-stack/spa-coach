@@ -1,4 +1,15 @@
 const { APP_VERSION } = globalThis.SpaVersion;
+const { DEFAULT_STATE: defaultState, migrateState } = globalThis.SpaState;
+const { createPhotoStore } = globalThis.SpaPhotoStore;
+const nativeAdapter = globalThis.SpaNativeBridge.createNativeBridge(window);
+const {
+  PAD_ORDER,
+  REFERENCES,
+  WET_PROTOTYPES,
+  colorCandidate,
+  detectPadsAlongAxis,
+  matchColor
+} = globalThis.SpaScanner;
 const {
   classify,
   evaluateSafety,
@@ -9,91 +20,10 @@ const {
 } = globalThis.SpaChemistry;
 const { formatMinutes, makeFollowUp } = globalThis.SpaFollowUp;
 const { futureRelative, maintenanceDue, maintenanceDueAt } = globalThis.SpaReminders;
-const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
+const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
 
 (() => {
   'use strict';
-
-  const PAD_ORDER = [
-    { key: 'hardness', name: 'Total Hardness', unit: 'ppm', values: [0, 100, 250, 500, 1000] },
-    { key: 'totalChlorine', name: 'Total Chlorine', unit: 'ppm', values: [0, 0.5, 1, 3, 5, 10] },
-    { key: 'freeChlorine', name: 'Free Chlorine', unit: 'ppm', values: [0, 0.5, 1, 3, 5, 10, 20] },
-    { key: 'ph', name: 'pH', unit: '', values: [6.2, 6.8, 7.2, 7.8, 8.4] },
-    { key: 'alkalinity', name: 'Total Alkalinity', unit: 'ppm', values: [0, 40, 80, 120, 180, 240] },
-    { key: 'cya', name: 'Cyanuric Acid', unit: 'ppm', values: [0, '30–50', 100, 150, 300] }
-  ];
-
-  // Experimental reference colors transcribed from the user's AquaChek Silver chart.
-  // The app intentionally requires confirmation because printed charts, lighting and cameras vary.
-  const REFERENCES = {
-    hardness: [
-      { value: 0, rgb: [62, 75, 121] }, { value: 100, rgb: [85, 70, 133] },
-      { value: 250, rgb: [103, 64, 128] }, { value: 500, rgb: [143, 45, 101] },
-      { value: 1000, rgb: [183, 40, 94] }
-    ],
-    totalChlorine: [
-      { value: 0, rgb: [165, 158, 103] }, { value: 0.5, rgb: [161, 159, 113] },
-      { value: 1, rgb: [156, 158, 118] }, { value: 3, rgb: [145, 161, 124] },
-      { value: 5, rgb: [126, 160, 129] }, { value: 10, rgb: [103, 159, 132] }
-    ],
-    freeChlorine: [
-      { value: 0, rgb: [248, 249, 248] }, { value: 0.5, rgb: [244, 241, 229] },
-      { value: 1, rgb: [245, 235, 233] }, { value: 3, rgb: [227, 201, 229] },
-      { value: 5, rgb: [212, 158, 214] }, { value: 10, rgb: [197, 107, 198] },
-      { value: 20, rgb: [159, 62, 172] }
-    ],
-    // Calibrated from the user's actual AquaChek bottle photographs. Hue is more
-    // stable than brightness for these two scales when a wet pad is photographed.
-    ph: [
-      { value: 6.2, rgb: [221, 170, 94] }, { value: 6.8, rgb: [230, 150, 100] },
-      { value: 7.2, rgb: [216, 120, 84] }, { value: 7.8, rgb: [216, 108, 105] },
-      { value: 8.4, rgb: [223, 74, 108] }
-    ],
-    alkalinity: [
-      { value: 0, rgb: [143, 97, 38] }, { value: 40, rgb: [122, 103, 44] },
-      { value: 80, rgb: [104, 100, 45] }, { value: 120, rgb: [109, 111, 88] },
-      { value: 180, rgb: [78, 108, 90] }, { value: 240, rgb: [86, 107, 110] }
-    ],
-    cya: [
-      { value: 0, rgb: [231, 180, 81] }, { value: '30–50', rgb: [225, 132, 65] },
-      { value: 100, rgb: [218, 91, 89] }, { value: 150, rgb: [206, 42, 139] },
-      { value: 300, rgb: [191, 38, 166] }
-    ]
-  };
-
-  // Wet-strip prototypes captured from the first real AquaChek Silver test used to
-  // calibrate the scanner engine. They supplement (not replace) the printed bottle swatches.
-  const WET_PROTOTYPES = {
-    // First real wet-strip calibration: the top hardness pad visually aligns with
-    // the 250 ppm bottle swatch after accounting for the wet pad becoming darker.
-    hardness: [{ value: 250, rgb: [83, 70, 113] }],
-    freeChlorine: [{ value: 20, rgb: [45, 18, 43] }],
-    ph: [{ value: 7.8, rgb: [148, 98, 100] }],
-    alkalinity: [{ value: 40, rgb: [161, 137, 76] }],
-    cya: [{ value: '30–50', rgb: [132, 96, 74] }]
-  };
-
-  const defaultState = {
-    profile: { name: 'My PureSpa', volume: 290, sanitizer: 'chlorine' },
-    onboardingComplete: false,
-    inventory: [
-      { id:'sanitizer', name:'Leisure Time Spa 56', purpose:'Sanitizer / shock', quantity:1, unit:'container', lowAt:0.25, dosePer500:0.5 },
-      { id:'raise', name:'Leisure Time Spa Up', purpose:'Raises pH / alkalinity', quantity:1, unit:'container', lowAt:0.25, dosePer500:1 },
-      { id:'lower', name:'SpaChoice pH Decreaser', purpose:'Lowers pH / alkalinity', quantity:1, unit:'container', lowAt:0.25, dosePer500:0.5 },
-      { id:'neutralizer', name:'AquaDoc Chlorine Neutralizer', purpose:'Optional high-chlorine reducer', quantity:1, unit:'container', lowAt:0.25, dosePer500:0.05 },
-      { id:'filter', name:'Intex Type S1', purpose:'Filter cartridge', quantity:1, unit:'cartridge', lowAt:1 }
-    ],
-    maintenance: { filterEnabled:true, filterDays:7, drainEnabled:true, drainDays:90, replacementEnabled:true, replacementDays:90 },
-    readings: null,
-    scan: null,
-    history: [],
-    lastFilterRinse: null,
-    lastDrainRefill: null,
-    lastFilterReplacement: null,
-    pendingFollowUp: null,
-    unresolvedIssues: [],
-    scannerCalibrations: []
-  };
 
   let state = loadState();
   let sourceImage = null;
@@ -114,13 +44,13 @@ const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
   // Native Android bridge. The browser/LAN build continues to work without it,
   // but only the installed Android build can post reliable reminders outside the app.
   function nativeBridge() {
-    return (typeof window.SpaNative !== 'undefined') ? window.SpaNative : null;
+    return nativeAdapter.get();
   }
   function isNativeAndroidApp() {
-    try { return Boolean(nativeBridge()?.isNativeApp()); } catch (_) { return false; }
+    return nativeAdapter.isNativeApp();
   }
   function nativePermissionStatus() {
-    try { return nativeBridge()?.getNotificationPermission?.() || 'unavailable'; } catch (_) { return 'unavailable'; }
+    return nativeAdapter.notificationPermission();
   }
   function reminderBody(follow) {
     const fc = num(state.readings?.freeChlorine);
@@ -181,84 +111,18 @@ const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
   function loadState() {
     try {
       const saved = JSON.parse(localStorage.getItem('spaCoachState') || 'null');
-      const inventory = Array.isArray(saved?.inventory) ? saved.inventory.map((item,index)=>({ quantity:1, unit:'container', lowAt:0.25, ...item, id:item.id || `custom-${index}` })) : structuredClone(defaultState.inventory);
-      if (!inventory.some(item=>item.id==='neutralizer')) inventory.push(structuredClone(defaultState.inventory.find(item=>item.id==='neutralizer')));
-      return { ...structuredClone(defaultState), ...(saved || {}), profile: { ...defaultState.profile, ...(saved?.profile || {}) }, maintenance: { ...defaultState.maintenance, ...(saved?.maintenance || {}) }, inventory };
-    } catch (_) { return structuredClone(defaultState); }
+      return migrateState(saved);
+    } catch (_) { return migrateState(null); }
   }
   function saveState() { localStorage.setItem('spaCoachState', JSON.stringify(state)); }
   // Strip photos are kept in IndexedDB, not localStorage. This keeps binary image
   // data separate from the small JSON state and lets history retain photos locally.
-  const PHOTO_DB_NAME = 'SpaCoachPhotoDB';
-  const PHOTO_DB_VERSION = 1;
-  const PHOTO_STORE = 'testPhotos';
-  let photoDbPromise = null;
-
-  function openPhotoDb() {
-    if (photoDbPromise) return photoDbPromise;
-    photoDbPromise = new Promise((resolve, reject) => {
-      if (!('indexedDB' in window)) { reject(new Error('IndexedDB is not available')); return; }
-      const req = indexedDB.open(PHOTO_DB_NAME, PHOTO_DB_VERSION);
-      req.onupgradeneeded = () => {
-        const db = req.result;
-        if (!db.objectStoreNames.contains(PHOTO_STORE)) db.createObjectStore(PHOTO_STORE, { keyPath:'id' });
-      };
-      req.onsuccess = () => resolve(req.result);
-      req.onerror = () => reject(req.error || new Error('Could not open photo database'));
-    });
-    return photoDbPromise;
-  }
-
-  function txDone(tx) {
-    return new Promise((resolve, reject) => {
-      tx.oncomplete = () => resolve();
-      tx.onerror = () => reject(tx.error || new Error('Photo database transaction failed'));
-      tx.onabort = () => reject(tx.error || new Error('Photo database transaction aborted'));
-    });
-  }
-
-  async function putPhotoRecord(id, fullBlob, thumbBlob, at, meta={}) {
-    if (!id || !fullBlob) return false;
-    const db = await openPhotoDb();
-    const tx = db.transaction(PHOTO_STORE, 'readwrite');
-    tx.objectStore(PHOTO_STORE).put({ id, fullBlob, thumbBlob: thumbBlob || fullBlob, at, version:APP_VERSION, ...meta });
-    await txDone(tx);
-    return true;
-  }
-
-  async function getPhotoRecord(id) {
-    const db = await openPhotoDb();
-    return await new Promise((resolve, reject) => {
-      const tx = db.transaction(PHOTO_STORE, 'readonly');
-      const req = tx.objectStore(PHOTO_STORE).get(id);
-      req.onsuccess = () => resolve(req.result || null);
-      req.onerror = () => reject(req.error || new Error('Could not read saved photo'));
-    });
-  }
-
-  async function getAllPhotoRecords() {
-    const db = await openPhotoDb();
-    return await new Promise((resolve, reject) => {
-      const tx = db.transaction(PHOTO_STORE, 'readonly');
-      const req = tx.objectStore(PHOTO_STORE).getAll();
-      req.onsuccess = () => resolve((req.result || []).sort((a,b) => String(b.at||'').localeCompare(String(a.at||''))));
-      req.onerror = () => reject(req.error || new Error('Could not read saved photos'));
-    });
-  }
-
-  async function deletePhotoRecord(id) {
-    const db = await openPhotoDb();
-    const tx = db.transaction(PHOTO_STORE, 'readwrite');
-    tx.objectStore(PHOTO_STORE).delete(id);
-    await txDone(tx);
-  }
-
-  async function clearPhotoRecords() {
-    const db = await openPhotoDb();
-    const tx = db.transaction(PHOTO_STORE, 'readwrite');
-    tx.objectStore(PHOTO_STORE).clear();
-    await txDone(tx);
-  }
+  const photoStore = createPhotoStore(window.indexedDB, APP_VERSION);
+  const putPhotoRecord = (...args) => photoStore.put(...args);
+  const getPhotoRecord = id => photoStore.get(id);
+  const getAllPhotoRecords = () => photoStore.getAll();
+  const deletePhotoRecord = id => photoStore.remove(id);
+  const clearPhotoRecords = () => photoStore.clear();
 
   function canvasBlob(canvasEl, type='image/jpeg', quality=.82) {
     return new Promise((resolve, reject) => {
@@ -294,12 +158,24 @@ const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
   window.addEventListener('pagehide', () => photoObjectUrls.forEach(url => URL.revokeObjectURL(url)), { once:true });
 
   function showScreen(id) {
-    screens.forEach(s => s.classList.toggle('active', s.id === id));
+    screens.forEach(screen => {
+      const active=screen.id===id;
+      screen.classList.toggle('active',active);
+      screen.setAttribute('aria-hidden',String(!active));
+      screen.inert=!active;
+    });
     window.scrollTo({ top: 0, behavior: 'instant' });
     if (id === 'homeScreen') renderHome();
     if (id === 'historyScreen') renderHistory();
     if (id === 'settingsScreen') renderSettings();
     if (id === 'savedPhotosScreen') renderSavedPhotoLibrary();
+    requestAnimationFrame(()=>{
+      const target=$(id)?.querySelector('h2, h3, button');
+      if(target){
+        if(/^H[23]$/.test(target.tagName))target.setAttribute('tabindex','-1');
+        target.focus({preventScroll:true});
+      }
+    });
   }
 
   document.addEventListener('click', (e) => {
@@ -310,6 +186,15 @@ const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
   $('settingsBtn').onclick = () => showScreen('settingsScreen');
   $('startTestBtn').onclick = () => { resetTestFlow(); showScreen('testScreen'); };
   $('openHistoryBtn').onclick = () => showScreen('historyScreen');
+  $('manualReadingsBtn').onclick=()=>{
+    state.readings=Object.fromEntries(PAD_ORDER.map(pad=>[pad.key,null]));
+    state.scan={at:new Date().toISOString(),version:APP_VERSION,detectionMode:'manual-entry',details:Object.fromEntries(PAD_ORDER.map(pad=>[
+      pad.key,
+      {confidence:'manual',invalid:['freeChlorine','ph'].includes(pad.key),reason:['freeChlorine','ph'].includes(pad.key)?'manual-required':null}
+    ]))};
+    renderReadingForm();
+    showScreen('editScreen');
+  };
 
   $('timerBtn').onclick = startTimer;
   function startTimer() {
@@ -402,12 +287,12 @@ const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
     ctx.restore();
   }
 
-  function colorCandidate(r, g, b) {
+  function colorCandidateLegacy(r, g, b) {
     const max = Math.max(r,g,b), min = Math.min(r,g,b);
     return (max - min) > 18 && max < 250 && min > 6;
   }
 
-  function detectPadsAlongAxis(mask, w, h, orientation) {
+  function detectPadsAlongAxisLegacy(mask, w, h, orientation) {
     const vertical = orientation === 'vertical';
     const minorLen = vertical ? w : h;
     const majorLen = vertical ? h : w;
@@ -722,7 +607,7 @@ const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
     const details = {};
     PAD_ORDER.forEach((pad, i) => {
       const sample = sampled[i];
-      const match = matchColor(sample.rgb, REFERENCES[pad.key], pad.key);
+      const match = matchColor(sample.rgb, REFERENCES[pad.key], pad.key, state.scannerCalibrations);
       const detail = { ...match, rgb: sample.rgb, innerSpread: sample.innerSpread, outerSpread: sample.outerSpread,
         innerHueSpread: sample.innerHueSpread, innerSatSpread: sample.innerSatSpread, outerHueSpread: sample.outerHueSpread,
         cropDataUrl: makePadCrop(taps[i].x, taps[i].y) };
@@ -782,7 +667,7 @@ const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
     showScreen('resultsScreen');
   }
 
-  function matchColor(rgb, refs, key) {
+  function matchColorLegacy(rgb, refs, key) {
     const lab = rgbToLab(rgb);
     const lch = labToLch(lab);
     const hueDriven = ['hardness', 'ph', 'alkalinity', 'cya'].includes(key) && lch.C >= 8;
@@ -941,7 +826,7 @@ const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
               <span>Your pad</span>
             </div>
             <div class="reference-choices">
-              ${alternatives.map(a => `<button type="button" class="reference-choice" data-pad="${pad.key}" data-value="${String(a.value)}">
+              ${alternatives.map(a => `<button type="button" class="reference-choice" aria-label="Choose ${escapeHtml(displayValue(pad,a.value))} for ${escapeHtml(pad.name)}" data-pad="${pad.key}" data-value="${String(a.value)}">
                 <span class="reference-swatch" style="background:${rgbCss(a.rgb)}"></span>
                 <strong>${escapeHtml(displayValue(pad,a.value))}</strong>
                 <small>Tap to choose</small>
@@ -1020,7 +905,7 @@ const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
       const raw = $(`edit_${pad.key}`).value;
       if (state.scan?.details?.[pad.key]) {
         const d = state.scan.details[pad.key];
-        if (raw !== '__unknown' && Array.isArray(d.rgb) && String(d.candidate) !== String(r[pad.key])) {
+        if ($('calibrationOptIn')?.checked && raw !== '__unknown' && Array.isArray(d.rgb) && String(d.candidate) !== String(r[pad.key])) {
           state.scannerCalibrations = [...(state.scannerCalibrations || []), { key:pad.key, value:r[pad.key], rgb:d.rgb, at:new Date().toISOString() }].slice(-72);
         }
         if (raw === '__unknown') {
@@ -1422,7 +1307,7 @@ const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
   async function buildFullBackup() {
     const photos=await getAllPhotoRecords(), encoded=[];
     for(const photo of photos) encoded.push({...photo,fullBlob:await blobToDataUrl(photo.fullBlob),thumbBlob:await blobToDataUrl(photo.thumbBlob||photo.fullBlob)});
-    const payload=buildBackupPayload(state, encoded);
+    const payload=buildBackupPayload(state, encoded, new Date().toISOString(), APP_VERSION);
     return {json:JSON.stringify(payload),filename:`spa-coach-backup-${new Date().toISOString().slice(0,10)}.json`,count:encoded.length};
   }
   $('fullBackupBtn').onclick=async()=>{
@@ -1450,13 +1335,16 @@ const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
     const status=$('backupStatus');
     try {
       const payload=JSON.parse(await file.text());
-      validateBackupPayload(payload);
       if(!confirm(`Restore this backup from ${formatDateTime(payload.createdAt)}? Current Spa Coach data will be replaced.`))return;
-      await clearPhotoRecords();
-      for(const photo of payload.photos) await putPhotoRecord(photo.id,dataUrlToBlob(photo.fullBlob),dataUrlToBlob(photo.thumbBlob),photo.at,photo.meta||{});
-      localStorage.setItem('spaCoachState',JSON.stringify(payload.state));
+      await restoreFullBackup(payload, {
+        migrateState,
+        decodeDataUrl:dataUrlToBlob,
+        photoStore,
+        storage:localStorage,
+        stateKey:'spaCoachState'
+      });
       status.textContent='Restore complete. Reopening Spa Coach…'; setTimeout(()=>location.reload(),500);
-    } catch(_) { status.textContent='That file is not a valid Spa Coach full backup.'; }
+    } catch(_) { status.textContent='Restore failed safely. Your existing Spa Coach data was kept.'; }
     finally { event.target.value=''; }
   };
 
@@ -1479,6 +1367,11 @@ const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
     $('drainIntervalDays').value=state.maintenance.drainDays;
     $('replacementReminderEnabled').checked=state.maintenance.replacementEnabled;
     $('replacementIntervalDays').value=state.maintenance.replacementDays;
+    const calibrationCount=(state.scannerCalibrations||[]).length;
+    $('calibrationSummary').textContent=calibrationCount
+      ? `${calibrationCount} learned color${calibrationCount===1?'':'s'} saved locally. Reset them if scanner results become less accurate.`
+      : 'No learned colors saved.';
+    $('resetCalibrationsBtn').disabled=calibrationCount===0;
     renderNotificationSettings();
   }
 
@@ -1490,7 +1383,7 @@ const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
       <input aria-label="Unit" placeholder="Unit" value="${escapeHtml(item.unit || 'container')}">
       <input aria-label="Low stock threshold" title="Low-stock threshold" type="number" min="0" step="0.01" value="${Number(item.lowAt ?? 0.25)}">
       <input aria-label="Dose per 500 gallons" title="Label dose in ounces per 500 gallons (optional)" type="number" min="0" step="0.01" placeholder="oz / 500 gal" value="${item.dosePer500 ?? ''}">
-      <div class="stock-stepper"><button type="button" data-stock-delta="-0.25" data-stock-index="${index}">−</button><button type="button" data-stock-delta="0.25" data-stock-index="${index}">+</button></div>
+      <div class="stock-stepper"><button type="button" aria-label="Decrease quantity for ${escapeHtml(item.name)}" data-stock-delta="-0.25" data-stock-index="${index}">−</button><button type="button" aria-label="Increase quantity for ${escapeHtml(item.name)}" data-stock-delta="0.25" data-stock-index="${index}">+</button></div>
       <button class="text-btn danger-text" data-remove-inventory="${index}" type="button">Remove</button></div>`).join('');
   }
   function collectInventory() {
@@ -1505,6 +1398,12 @@ const { buildBackupPayload, validateBackupPayload } = globalThis.SpaBackup;
   $('addInventoryBtn').onclick=()=>{ state.inventory=collectInventory(); state.inventory.push({id:`custom-${Date.now()}`,name:'',purpose:''}); renderInventoryEditor(); };
   $('inventoryEditor').onclick=e=>{ const stock=e.target.closest('[data-stock-delta]'); if(stock){ state.inventory=collectInventory(); const item=state.inventory[Number(stock.dataset.stockIndex)]; if(item){item.quantity=Math.max(0,item.quantity+Number(stock.dataset.stockDelta)); saveState(); renderInventoryEditor(); renderHome();} return;} const button=e.target.closest('[data-remove-inventory]'); if(!button)return; state.inventory=collectInventory().filter((_,i)=>i!==Number(button.dataset.removeInventory)); renderInventoryEditor(); };
   $('saveInventoryBtn').onclick=()=>{ state.inventory=collectInventory(); saveState(); renderInventoryEditor(); };
+  $('resetCalibrationsBtn').onclick=()=>{
+    if(!confirm('Reset all learned strip colors? Printed and built-in wet references will remain.'))return;
+    state.scannerCalibrations=[];
+    saveState();
+    renderSettings();
+  };
   $('saveMaintenanceBtn').onclick=()=>{
     state.maintenance={ filterEnabled:$('filterReminderEnabled').checked, filterDays:Math.max(1,Number($('filterIntervalDays').value)||7), drainEnabled:$('drainReminderEnabled').checked, drainDays:Math.max(7,Number($('drainIntervalDays').value)||90), replacementEnabled:$('replacementReminderEnabled').checked, replacementDays:Math.max(7,Number($('replacementIntervalDays').value)||90) };
     saveState(); syncNativeReminder(); renderHome();
