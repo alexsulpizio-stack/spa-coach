@@ -36,6 +36,7 @@ android {
         targetSdk = 37
         versionCode = spaVersionCode
         versionName = spaVersionName
+        testInstrumentationRunner = 'androidx.test.runner.AndroidJUnitRunner'
         buildConfigField 'String', 'UPDATE_MANIFEST_URL', '"https://raw.githubusercontent.com/alexsulpizio-stack/spa-coach/main/update.json"'
     }
 
@@ -53,10 +54,19 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
+
+    testOptions {
+        unitTests.includeAndroidResources = true
+    }
 }
 
 dependencies {
     implementation 'androidx.core:core:1.19.0'
+    testImplementation 'junit:junit:4.13.2'
+    testImplementation 'org.robolectric:robolectric:4.16.1'
+    testImplementation 'androidx.test:core:1.7.0'
+    androidTestImplementation 'androidx.test.ext:junit:1.3.0'
+    androidTestImplementation 'androidx.test:runner:1.7.0'
 }
 
 tasks.register('syncWebAssets', Sync) {

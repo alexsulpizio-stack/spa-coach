@@ -144,6 +144,7 @@ public class MainActivity extends Activity {
                 JSONObject update=new JSONObject(json.toString());
                 int versionCode=update.getInt("versionCode");
                 if(versionCode<=BuildConfig.VERSION_CODE) { sendUpdateStatus("Spa Coach is up to date (v"+BuildConfig.VERSION_NAME+")."); return; }
+                UpdateSecurity.verifyManifest(update, UpdateSecurity.installedSigningPublicKey(getPackageManager()));
                 String versionName=update.optString("versionName","new version");
                 String apkUrl=update.getString("apkUrl");
                 String apkSha256=update.getString("apkSha256");
@@ -153,6 +154,7 @@ public class MainActivity extends Activity {
                 }
                 sendUpdateStatus("Downloading Spa Coach v"+versionName+" for verification…");
                 File verifiedApk = downloadVerifiedApk(apkUrl, apkSha256);
+                UpdateSecurity.verifyApkIdentity(verifiedApk, update, getPackageManager());
                 sendUpdateStatus("Update verified. Opening Android installer…");
                 runOnUiThread(() -> promptInstallVerifiedApk(verifiedApk));
             } catch(SecurityException error) {
