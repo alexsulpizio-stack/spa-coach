@@ -1,6 +1,10 @@
-# Spa Coach PHONE v0.9.5
+# Spa Coach PHONE v0.9.6
 
 Spa Coach is a local-first hot-tub water testing and maintenance coach. The browser app and Android WebView use the same canonical web source in this directory.
+
+## New in v0.9.6
+
+- Review auto-skips total chlorine when it cannot be at or above free chlorine so Use These Readings stays available
 
 ## New in v0.9.5
 

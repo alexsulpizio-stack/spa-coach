@@ -12,6 +12,20 @@ test('onboarding leads to the water-care dashboard',async({page})=>{
   await expect(page.getByText('Upcoming care')).toBeVisible();
 });
 
+test('high free chlorine auto-skips conflicting total chlorine so save stays enabled',async({page})=>{
+  await finishOnboarding(page);
+  await page.getByRole('button',{name:'TEST MY WATER'}).click();
+  await page.getByRole('button',{name:'ENTER READINGS MANUALLY'}).click();
+  await page.locator('#edit_totalChlorine').selectOption('10');
+  await page.locator('#edit_freeChlorine').selectOption('20');
+  await page.locator('#edit_ph').selectOption('7.2');
+  await expect(page.locator('#edit_totalChlorine')).toHaveValue('__unknown');
+  await expect(page.locator('#saveEditsBtn')).toBeEnabled();
+  await page.getByRole('button',{name:'USE THESE READINGS'}).click();
+  await expect(page.locator('#resultRows')).toContainText('20 ppm');
+  await expect(page.locator('#resultRows')).toContainText('Unknown / skipped');
+});
+
 test('manual readings produce conservative treatment guidance',async({page})=>{
   await finishOnboarding(page);
   await page.getByRole('button',{name:'TEST MY WATER'}).click();

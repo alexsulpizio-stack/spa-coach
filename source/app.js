@@ -555,23 +555,41 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
 
   $('editReadingsBtn').onclick = () => { renderReadingForm(); showScreen('editScreen'); };
 
+  function reviewPresetValue(pad, detail, readings) {
+    let selected = detail.invalid ? '__unknown' : (readings[pad.key] ?? detail.candidate ?? detail.value ?? '');
+    if (selected === '' || selected == null) selected = detail.invalid ? '__unknown' : '';
+    if (pad.key === 'totalChlorine' && selected !== '__unknown' && isChemistryConflict(selected, readings.freeChlorine)) {
+      selected = '__unknown';
+    }
+    return selected === '' || selected == null ? '' : String(selected);
+  }
+
   function renderReadingForm() {
     const r = state.readings || {};
     const details = state.scan?.details || {};
+    const freeChlorine = num(r.freeChlorine ?? details.freeChlorine?.value);
     $('readingForm').innerHTML = PAD_ORDER.map(pad => {
       const d = details[pad.key] || {};
-      const selected = d.invalid ? '' : (r[pad.key] ?? d.candidate ?? d.value ?? '');
+      const selected = reviewPresetValue(pad, d, r);
       const opts = [
         `<option value="" ${selected === '' ? 'selected' : ''} disabled>Select reading…</option>`,
-        ...pad.values.map(v => `<option value="${String(v)}" ${String(v)===String(selected)?'selected':''}>${displayValue(pad,v)}</option>`),
+        ...pad.values.map(v => {
+          const blocked = pad.key === 'totalChlorine' && Number.isFinite(freeChlorine) && Number.isFinite(num(v)) && num(v) < freeChlorine;
+          return `<option value="${String(v)}" ${String(v)===String(selected)?'selected':''} ${blocked?'disabled':''}>${displayValue(pad,v)}${blocked ? ' (below free chlorine)' : ''}</option>`;
+        }),
         `<option value="__unknown">Unknown / skip</option>`
       ].join('');
 
-      const note = d.invalid
-        ? '<span class="verify-note">Scanner rejected this pad — select a bottle-chart value or choose Unknown / skip.</span>'
-        : d.uncertain
-          ? '<span class="verify-note">Scanner was uncertain — please confirm.</span>'
-          : '';
+      const skippedForChlorine = pad.key === 'totalChlorine' && selected === '__unknown' && Number.isFinite(freeChlorine);
+      const note = skippedForChlorine && Number.isFinite(num(r.totalChlorine ?? d.value)) && isChemistryConflict(r.totalChlorine ?? d.value, freeChlorine)
+        ? `<span class="verify-note">Total chlorine was set to Unknown / skip because it cannot be below free chlorine (${freeChlorine} ppm). The bottle chart tops out at 10 ppm.</span>`
+        : d.invalid
+          ? '<span class="verify-note">Scanner rejected this pad — it is set to Unknown / skip. Choose a bottle-chart value if you can read it.</span>'
+          : d.uncertain
+            ? '<span class="verify-note">Scanner was uncertain — please confirm.</span>'
+            : skippedForChlorine && freeChlorine > 10
+              ? `<span class="verify-note">Free chlorine is ${freeChlorine} ppm, above every total chlorine bottle-chart step. Total chlorine is Unknown / skip so you can continue.</span>`
+              : '';
 
       const alternatives = (d.alternatives || []).slice(0,2);
       const padPhoto = padColorMarkup(d, pad.name);
@@ -633,23 +651,49 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     return { r, incompleteRejected };
   }
 
+  function refreshTotalChlorineOptions() {
+    const freeChlorine = num($('edit_freeChlorine')?.value);
+    const tcSelect = $('edit_totalChlorine');
+    if (!tcSelect) return;
+    [...tcSelect.options].forEach(option => {
+      if (option.value === '' || option.value === '__unknown') return;
+      const value = num(option.value);
+      const blocked = Number.isFinite(freeChlorine) && Number.isFinite(value) && value < freeChlorine;
+      option.disabled = blocked;
+      const label = option.dataset.baseLabel || option.textContent.replace(/ \(below free chlorine\)$/, '');
+      option.dataset.baseLabel = label;
+      option.textContent = blocked ? `${label} (below free chlorine)` : label;
+    });
+  }
+
   function validateReviewForm() {
     const validation = $('reviewValidation');
     const saveBtn = $('saveEditsBtn');
     if (!validation || !saveBtn) return;
-    const { r, incompleteRejected } = reviewFormValues();
-    const tc = num(r.totalChlorine), fc = num(r.freeChlorine);
-    const conflict = isChemistryConflict(tc, fc);
+    let { r, incompleteRejected } = reviewFormValues();
+    let autoSkippedTotalChlorine = false;
+    const tcSelect = $('edit_totalChlorine');
+    if (tcSelect && isChemistryConflict(r.totalChlorine, r.freeChlorine)) {
+      tcSelect.value = '__unknown';
+      autoSkippedTotalChlorine = true;
+      ({ r, incompleteRejected } = reviewFormValues());
+    }
 
     let msg = '';
+    let blocking = false;
     if (incompleteRejected) {
       msg = 'For each rejected pad, choose a bottle-chart value or “Unknown / skip.”';
-    } else if (conflict) {
-      msg = `Total chlorine (${tc} ppm) cannot be lower than free chlorine (${fc} ppm). Correct one reading or mark Total Chlorine Unknown / skip.`;
+      blocking = true;
+    } else if (autoSkippedTotalChlorine) {
+      const fc = num(r.freeChlorine);
+      msg = Number.isFinite(fc) && fc > 10
+        ? `Total chlorine was set to Unknown / skip. Free chlorine is ${fc} ppm, above the 10 ppm bottle-chart maximum.`
+        : `Total chlorine was set to Unknown / skip because it cannot be below free chlorine (${fc} ppm).`;
     }
-    saveBtn.disabled = Boolean(msg);
-    validation.className = msg ? 'callout bad-callout' : 'callout success-callout hidden';
+    saveBtn.disabled = blocking;
+    validation.className = msg ? (blocking ? 'callout bad-callout' : 'callout warn-callout') : 'callout success-callout hidden';
     validation.textContent = msg;
+    refreshTotalChlorineOptions();
   }
 
   $('saveEditsBtn').onclick = () => {
