@@ -1,6 +1,6 @@
 (() => {
-function createPhotoStore(indexedDb, appVersion) {
-  const databaseName = 'SpaCoachPhotoDB';
+function createPhotoStore(indexedDb, appVersion, options = {}) {
+  const databaseName = options.databaseName || 'SpaCoachPhotoDB';
   const storeName = 'testPhotos';
   let dbPromise = null;
 

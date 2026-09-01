@@ -1,6 +1,13 @@
-# Spa Coach PHONE v0.9.7
+# Spa Coach PHONE v0.9.8
 
 Spa Coach is a local-first hot-tub water testing and maintenance coach. The browser app and Android WebView use the same canonical web source in this directory.
+
+The strip-only product lives at [`reader/`](reader/). It uses the same `lib/scanner.js` and `lib/scan-session.js` engine as Spa Coach, so pad-reading changes land in both apps.
+
+## New in v0.9.8
+
+- Shared strip-reading session (`lib/scan-session.js`) used by Spa Coach and Strip Reader
+- Strip Reader at `/reader/`: scan, confirm, and save AquaChek Silver 7-in-1 readings without chemical coaching
 
 ## New in v0.9.7
 
@@ -84,9 +91,12 @@ The strip scanner remains experimental and is not a certified water-testing inst
 ## Development
 
 - Run browser mode with `start_phone.bat`.
+- Open Strip Reader at `/reader/` on the same local server.
 - Run domain tests with `npm test`.
+- Run browser end-to-end tests with `npm run test:e2e`.
 - Build Android from `android/` with `./gradlew :app:assembleDebug`.
 - Android's `preBuild` task copies the canonical web files and `lib/` modules into generated WebView assets; do not edit `android/app/src/main/assets/www`.
 - Change the app version only in `lib/version.js`.
+- Change strip-reading behavior only in `lib/scanner.js` and `lib/scan-session.js` so Spa Coach and Strip Reader stay in lockstep.
 
 CI builds directly from this `source/` tree. The old checked-in source ZIP is no longer used.
