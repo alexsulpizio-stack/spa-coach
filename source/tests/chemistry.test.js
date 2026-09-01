@@ -70,8 +70,9 @@ test('high chlorine uses a conservative half neutralizer dose', () => {
 test('pH correction retains conservative incremental dosing', () => {
   const plan = treatmentPlan({ freeChlorine: 5, ph: 8.2 }, 290, inventory);
   assert.equal(plan.focus, 'pH');
-  assert.equal(plan.product, 'SpaChoice pH Decreaser');
+  assert.equal(plan.product, 'Test pH Down');
   assert.match(plan.dose, /0\.5 oz/);
+  assert.equal(treatmentPlan({ freeChlorine: 5, ph: 8.2 }, 290, []).product, 'SpaChoice pH Decreaser');
 });
 
 test('generic treatment names chemical classes, not brands', () => {
