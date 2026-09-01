@@ -43,6 +43,21 @@ test('treatment plan scales sanitizer dose by spa volume', () => {
   assert.equal(plan.product, 'Test Sanitizer');
   assert.match(plan.dose, /0\.29 oz/);
   assert.equal(plan.retestMinutes, 5);
+  assert.equal(plan.products.length, 2);
+  assert.match(plan.products[1].dose, /1 tablet/);
+});
+
+test('in-range water offers an optional chlorine tab hold below 8 ppm', () => {
+  const plan = treatmentPlan({ freeChlorine: 5, ph: 7.4 }, 290, inventory);
+  assert.equal(plan.action, 'none');
+  assert.match(plan.products[0].name, /Chlorine tablets/);
+  assert.match(plan.products[0].dose, /1 tablet/);
+});
+
+test('chlorine tab count is at least one and scales by volume', () => {
+  const { chlorineTabCount } = globalThis.SpaChemistry;
+  assert.equal(chlorineTabCount(290, inventory), 1);
+  assert.equal(chlorineTabCount(1000, inventory), 2);
 });
 
 test('high chlorine uses a conservative half neutralizer dose', () => {

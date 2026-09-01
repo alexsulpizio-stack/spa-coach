@@ -52,12 +52,27 @@ function inventoryDose(inventory, id, fallback) {
   return Number.isFinite(dose) && dose > 0 ? dose : fallback;
 }
 
+function chlorineTabCount(gallons, inventory) {
+  const scale = gallons / 500;
+  return Math.max(1, Math.round(inventoryDose(inventory, 'chlorineTabs', 1) * scale));
+}
+
+function chlorineTabDose(gallons, inventory) {
+  const count = chlorineTabCount(gallons, inventory);
+  const noun = count === 1 ? 'tablet' : 'tablets';
+  return `${count} ${noun} in a floating feeder for ${gallons} gal`;
+}
+
 function treatmentPlan(readings, gallons, inventory = []) {
   const freeChlorine = num(readings.freeChlorine);
   const ph = num(readings.ph);
   const alkalinity = num(readings.alkalinity);
   const scale = gallons / 500;
   const sanitizerDose = (inventoryDose(inventory, 'sanitizer', 0.5) * scale).toFixed(2);
+  const sanitizerName = inventoryName(inventory, 'sanitizer', 'Leisure Time Spa 56');
+  const tabName = inventoryName(inventory, 'chlorineTabs', 'Chlorine tablets (1-inch)');
+  const tabDose = chlorineTabDose(gallons, inventory);
+  const tabCount = chlorineTabCount(gallons, inventory);
   const phUpDose = (inventoryDose(inventory, 'raise', 1) * scale).toFixed(2);
   const phUpLowDose = (inventoryDose(inventory, 'raise', 1) * 2 * scale).toFixed(2);
 
@@ -71,17 +86,32 @@ function treatmentPlan(readings, gallons, inventory = []) {
       explanation: `Free chlorine is ${freeChlorine} ppm, above the app's 3–10 ppm use range. Waiting uncovered with circulation is the default. Neutralizer is an optional faster correction.`,
       product: inventoryName(inventory, 'neutralizer', 'AquaDoc Chlorine Neutralizer'),
       dose: `Conservative starting dose for ${gallons} gal: about ${startingDose.toFixed(2)} oz (${(startingDose * 28.3495).toFixed(1)} g). This is half the calculated amount to approach 5 ppm.`,
-      steps: ['Do not use the hot tub while free chlorine is above 10 ppm.', 'Confirm the reading with a fresh strip and remove any chlorine feeder.', `If choosing neutralizer, weigh about ${startingDose.toFixed(2)} oz (${(startingDose * 28.3495).toFixed(1)} g) and add it according to the label with circulation running.`, 'Wait 1 hour and retest before adding any more.', 'Alternatively, add nothing, leave the cover open safely, circulate, and let chlorine fall naturally.'],
+      products: [
+        { label: 'Optional faster correction', name: inventoryName(inventory, 'neutralizer', 'AquaDoc Chlorine Neutralizer'), dose: `Conservative starting dose for ${gallons} gal: about ${startingDose.toFixed(2)} oz (${(startingDose * 28.3495).toFixed(1)} g)` }
+      ],
+      steps: ['Do not use the hot tub while free chlorine is above 10 ppm.', 'Confirm the reading with a fresh strip and remove any chlorine tablet feeder.', `If choosing neutralizer, weigh about ${startingDose.toFixed(2)} oz (${(startingDose * 28.3495).toFixed(1)} g) and add it according to the label with circulation running.`, 'Wait 1 hour and retest before adding any more.', 'Alternatively, add nothing, leave the cover open safely, circulate, and let chlorine fall naturally.'],
       note: 'Never mix spa chemicals. Spa Coach uses AquaDoc’s published guide of about 1 oz per 1 ppm per 10,000 gallons, then starts at half the calculated dose because strips and water volume are approximate.'
     };
   }
   if (Number.isFinite(freeChlorine) && freeChlorine < 3) return {
     action: 'dose', focus: 'free chlorine', followUpTitle: 'Retest free chlorine', retestMinutes: 5,
     title: 'Raise free chlorine first',
-    explanation: `Free chlorine is ${freeChlorine} ppm. Correct sanitizer before adjusting the secondary water-balance readings.`,
-    product: inventoryName(inventory, 'sanitizer', 'Leisure Time Spa 56'), dose: `Label-scaled regular dose for ${gallons} gal: about ${sanitizerDose} oz`,
-    steps: [`Measure about ${sanitizerDose} oz of Spa 56.`, 'Add it according to the product label with circulation running.', 'Circulate for 5 minutes.', 'Retest free chlorine before using the spa or adding more.'],
-    note: 'The app scales the bottle’s ½ oz per 500 gal regular dose. Confirm the product label if your formulation changes.'
+    explanation: `Free chlorine is ${freeChlorine} ppm. Use ${sanitizerName} now to bring sanitizer up. After it is in the 3–10 ppm range, a chlorine tab in a floater can hold it between tests.`,
+    product: sanitizerName,
+    dose: `Label-scaled regular dose for ${gallons} gal: about ${sanitizerDose} oz`,
+    products: [
+      { label: 'Raise now', name: sanitizerName, dose: `Label-scaled regular dose for ${gallons} gal: about ${sanitizerDose} oz` },
+      { label: 'Then hold', name: tabName, dose: tabDose }
+    ],
+    steps: [
+      `Measure about ${sanitizerDose} oz of ${sanitizerName}.`,
+      'Add it according to the product label with circulation running.',
+      'Circulate for 5 minutes and retest free chlorine before using the spa or adding more.',
+      `When free chlorine is 3–10 ppm, add ${tabCount === 1 ? '1 tablet' : `${tabCount} tablets`} to a floating feeder. Do not drop tabs on the spa floor or next to metal fittings.`,
+      'Do not add a tab in the same step as Spa 56. Retest first, then start the feeder.',
+      'Remove the feeder if a later test is above 10 ppm.'
+    ],
+    note: 'The app scales the Spa 56 bottle’s ½ oz per 500 gal regular dose, and 1-inch tabs at about 1 tablet per 500 gal (minimum 1). Tabs dissolve slowly and can lower pH, so retest before the next soak.'
   };
   if (Number.isFinite(ph) && ph > 7.8) return {
     action: 'dose', focus: 'pH', followUpTitle: 'Retest pH and alkalinity', retestMinutes: 30,
@@ -118,8 +148,15 @@ function treatmentPlan(readings, gallons, inventory = []) {
     action: 'none', focus: null, followUpTitle: null, retestMinutes: null,
     title: 'No chemical adjustment is the first priority',
     explanation: 'Free chlorine and pH are in the app’s use range, and no higher-priority correction is indicated by these readings.',
-    product: null, dose: '', steps: ['Log this test.', 'Retest before your next soak or whenever water conditions change.'],
-    note: 'Test-strip readings are approximate; confirm anything that looks inconsistent with the bottle chart.'
+    product: freeChlorine < 8 ? tabName : null,
+    dose: freeChlorine < 8 ? `Optional hold: ${tabDose}` : '',
+    products: Number.isFinite(freeChlorine) && freeChlorine < 8
+      ? [{ label: 'Optional hold', name: tabName, dose: `Optional: ${tabDose}. Skip this if a feeder is already in the water.` }]
+      : [],
+    steps: Number.isFinite(freeChlorine) && freeChlorine < 8
+      ? ['Log this test.', `If you want slow sanitizer between soaks, add ${tabCount === 1 ? '1 tablet' : `${tabCount} tablets`} to a floating feeder.`, 'Do not add a tab if a feeder is already running or if you just dosed Spa 56 without a retest.', 'Retest before your next soak. Remove the feeder if free chlorine rises above 10 ppm.']
+      : ['Log this test.', 'Leave any chlorine tablet feeder out while free chlorine is near the top of the 3–10 ppm range.', 'Retest before your next soak or whenever water conditions change.'],
+    note: 'Test-strip readings are approximate; confirm anything that looks inconsistent with the bottle chart. Tabs dissolve slowly and can lower pH.'
   };
 }
 
@@ -143,6 +180,7 @@ globalThis.SpaChemistry = Object.freeze({
   isChemistryConflict,
   num,
   treatmentPlan,
+  chlorineTabCount,
   unresolvedIssuesFor
 });
 })();

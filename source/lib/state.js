@@ -7,6 +7,7 @@ const DEFAULT_STATE = {
   onboardingComplete: false,
   inventory: [
     { id:'sanitizer', name:'Leisure Time Spa 56', purpose:'Sanitizer / shock', quantity:1, unit:'container', lowAt:0.25, dosePer500:0.5 },
+    { id:'chlorineTabs', name:'Chlorine tablets (1-inch)', purpose:'Floating feeder sanitizer', quantity:1, unit:'tablet', lowAt:4, dosePer500:1 },
     { id:'raise', name:'Leisure Time Spa Up', purpose:'Raises pH / alkalinity', quantity:1, unit:'container', lowAt:0.25, dosePer500:1 },
     { id:'lower', name:'SpaChoice pH Decreaser', purpose:'Lowers pH / alkalinity', quantity:1, unit:'container', lowAt:0.25, dosePer500:0.5 },
     { id:'neutralizer', name:'AquaDoc Chlorine Neutralizer', purpose:'Optional high-chlorine reducer', quantity:1, unit:'container', lowAt:0.25, dosePer500:0.05 },
@@ -41,6 +42,12 @@ function migrateState(input) {
     : clone(DEFAULT_STATE.inventory);
   if (!inventory.some(item => item.id === 'neutralizer')) {
     inventory.push(clone(DEFAULT_STATE.inventory.find(item => item.id === 'neutralizer')));
+  }
+  if (!inventory.some(item => item.id === 'chlorineTabs')) {
+    const tabs = clone(DEFAULT_STATE.inventory.find(item => item.id === 'chlorineTabs'));
+    const sanitizerAt = inventory.findIndex(item => item.id === 'sanitizer');
+    if (sanitizerAt >= 0) inventory.splice(sanitizerAt + 1, 0, tabs);
+    else inventory.push(tabs);
   }
   return {
     ...clone(DEFAULT_STATE),
