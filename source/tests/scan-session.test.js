@@ -9,8 +9,29 @@ import { encodeStripRgba } from '../e2e/helpers/synthetic-strip.js';
 const { PAD_ORDER, REFERENCES, buildPadReadings } = globalThis.SpaScanner;
 const { detectPadsFromPixels, scalePoints, analyzePadSamples } = globalThis.SpaScanSession;
 
+function downscaleRgba(data, width, height, maxDim) {
+  const scale = Math.min(1, maxDim / Math.max(width, height));
+  const w = Math.max(1, Math.round(width * scale));
+  const h = Math.max(1, Math.round(height * scale));
+  const scaled = new Uint8ClampedArray(w * h * 4);
+  for (let y = 0; y < h; y++) {
+    const sy = Math.min(height - 1, Math.round(y / scale));
+    for (let x = 0; x < w; x++) {
+      const sx = Math.min(width - 1, Math.round(x / scale));
+      const si = (sy * width + sx) * 4;
+      const di = (y * w + x) * 4;
+      scaled[di] = data[si];
+      scaled[di + 1] = data[si + 1];
+      scaled[di + 2] = data[si + 2];
+      scaled[di + 3] = 255;
+    }
+  }
+  return { data: scaled, width: w, height: h };
+}
+
 test('detectPadsFromPixels finds six pads on a synthetic Silver 7-in-1 image', () => {
-  const { data, width, height } = encodeStripRgba();
+  const full = encodeStripRgba();
+  const { data, width, height } = downscaleRgba(full.data, full.width, full.height, 180);
   const result = detectPadsFromPixels(data, width, height);
   assert.equal(result?.points.length, 6);
   assert.equal(result?.orientation, 'vertical');
