@@ -4,13 +4,17 @@ const { createPhotoStore } = globalThis.SpaPhotoStore;
 const nativeAdapter = globalThis.SpaNativeBridge.createNativeBridge(window);
 const {
   PAD_ORDER,
-  colorCandidate,
-  detectPadsAlongAxis,
-  samplePatchFromPixels,
-  estimateWhitePoint,
-  buildPadReadings,
   shouldLearnCalibration
 } = globalThis.SpaScanner;
+const {
+  EMPTY_PAD_SAMPLE,
+  detectPadsFromBitmap,
+  pixelsFromBitmap,
+  scalePoints,
+  samplePadsAtSourcePoints,
+  analyzePadSamples,
+  cropPadFromBitmap
+} = globalThis.SpaScanSession;
 const {
   classify,
   evaluateSafety,
@@ -292,13 +296,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
 
   function getSourcePixels() {
     if (sourcePixels || !sourceImage) return sourcePixels;
-    const copy = document.createElement('canvas');
-    copy.width = sourceImage.width;
-    copy.height = sourceImage.height;
-    const copyCtx = copy.getContext('2d', { willReadFrequently: true });
-    copyCtx.drawImage(sourceImage, 0, 0);
-    const imageData = copyCtx.getImageData(0, 0, copy.width, copy.height);
-    sourcePixels = { data: imageData.data, width: copy.width, height: copy.height };
+    sourcePixels = pixelsFromBitmap(sourceImage);
     return sourcePixels;
   }
 
@@ -309,28 +307,9 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
 
   function autoDetectPads() {
     if (!sourceImage || !canvas.width || !canvas.height) return null;
-    // Geometry does not need full camera resolution. A smaller working image
-    // keeps older phones responsive while preserving six-pad spacing.
-    const maxDim=180;
-    const scale=Math.min(1,maxDim/Math.max(sourceImage.width,sourceImage.height));
-    const w=Math.max(1,Math.round(sourceImage.width*scale));
-    const h=Math.max(1,Math.round(sourceImage.height*scale));
-    const c=document.createElement('canvas'); c.width=w; c.height=h;
-    const cctx=c.getContext('2d',{willReadFrequently:true});
-    cctx.drawImage(sourceImage,0,0,w,h);
-    const data=cctx.getImageData(0,0,w,h).data;
-    const mask=new Uint8Array(w*h);
-    for (let i=0,p=0; i<data.length; i+=4,p++) mask[p]=colorCandidate(data[i],data[i+1],data[i+2])?1:0;
-
-    const vertical=detectPadsAlongAxis(mask,w,h,'vertical');
-    const horizontal=detectPadsAlongAxis(mask,w,h,'horizontal');
-    let result=null;
-    if (vertical && horizontal) result=vertical.score>=horizontal.score?vertical:horizontal;
-    else result=vertical||horizontal;
+    const result = detectPadsFromBitmap(sourceImage);
     if (!result) return null;
-
-    // Map detection coordinates back onto the visible scan canvas.
-    result.points=result.points.map(p=>({x:p.x*canvas.width/w,y:p.y*canvas.height/h}));
+    result.points = scalePoints(result.points, sourceImage.width, sourceImage.height, canvas.width, canvas.height);
     return result;
   }
 
@@ -402,30 +381,13 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   canvas.addEventListener('touchend', onCanvasTap, { passive: false });
 
   function samplePatch(x, y) {
-    // Sample the full-resolution source photo, not the downscaled display canvas.
     const pixels = getSourcePixels();
-    if (!pixels) return { rgb:[0,0,0], innerSpread:0, outerSpread:0, outerMedianSpread:0, innerHueSpread:0, innerSatSpread:0, outerHueSpread:0 };
-    const source = canvasToSourcePoint(x, y);
-    return samplePatchFromPixels(pixels.data, pixels.width, pixels.height, source.x, source.y);
+    if (!pixels) return { ...EMPTY_PAD_SAMPLE };
+    return samplePadsAtSourcePoints(pixels, [canvasToSourcePoint(x, y)])[0];
   }
 
   function makePadCrop(x, y) {
-    if (!sourceImage || !canvas.width || !canvas.height) return null;
-    try {
-      const scaleX = sourceImage.width / canvas.width;
-      const scaleY = sourceImage.height / canvas.height;
-      const half = 42;
-      const sx = Math.max(0, (x - half) * scaleX);
-      const sy = Math.max(0, (y - half) * scaleY);
-      const sw = Math.min(sourceImage.width - sx, half * 2 * scaleX);
-      const sh = Math.min(sourceImage.height - sy, half * 2 * scaleY);
-      const c = document.createElement('canvas');
-      c.width = 112; c.height = 112;
-      const cctx = c.getContext('2d');
-      cctx.fillStyle = '#fff'; cctx.fillRect(0, 0, c.width, c.height);
-      cctx.drawImage(sourceImage, sx, sy, sw, sh, 0, 0, c.width, c.height);
-      return c.toDataURL('image/jpeg', .82);
-    } catch (_) { return null; }
+    return cropPadFromBitmap(sourceImage, x, y, canvas.width, canvas.height);
   }
 
   function renderTapProgress() {
@@ -463,8 +425,8 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   function analyzeTaps() {
     const pixels = getSourcePixels();
     const sourcePoints = taps.map(point => canvasToSourcePoint(point.x, point.y));
-    const whitePoint = pixels ? estimateWhitePoint(pixels.data, pixels.width, pixels.height, sourcePoints) : null;
-    const result = buildPadReadings(sampled, state.scannerCalibrations, { whitePoint });
+    const result = analyzePadSamples(sampled, pixels, sourcePoints, state.scannerCalibrations);
+    const whitePoint = result.whitePoint;
     if (result.flipped) {
       taps = [...taps].reverse();
       sampled = [...sampled].reverse();

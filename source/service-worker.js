@@ -4,7 +4,7 @@ const { CACHE_NAME } = globalThis.SpaVersion;
 const ASSETS = [
   './', './index.html', './styles.css', './app.js', './manifest.webmanifest',
   './lib/version.js', './lib/state.js', './lib/photo-store.js', './lib/native-bridge.js',
-  './lib/scanner.js', './lib/chemistry.js', './lib/followup.js', './lib/reminders.js', './lib/backup.js',
+  './lib/scanner.js', './lib/scan-session.js', './lib/chemistry.js', './lib/followup.js', './lib/reminders.js', './lib/backup.js',
   './icon-192.png', './icon-512.png', './apple-touch-icon.png'
 ];
 self.addEventListener('install', event => {
@@ -17,6 +17,10 @@ self.addEventListener('activate', event => {
 });
 self.addEventListener('fetch', event => {
   if (event.request.method !== 'GET') return;
+  try {
+    const pathname = new URL(event.request.url).pathname;
+    if (pathname.includes('/reader/')) return;
+  } catch (_) {}
   event.respondWith(fetch(event.request).then(response => {
     const copy = response.clone();
     caches.open(CACHE_NAME).then(cache => cache.put(event.request, copy));
