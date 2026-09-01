@@ -11,6 +11,7 @@ test('legacy state is normalized and versioned',()=>{
   assert.equal(migrated.profile.name,'Legacy');
   assert.equal(migrated.profile.volume,290);
   assert.ok(migrated.inventory.some(item=>item.id==='neutralizer'));
+  assert.ok(migrated.inventory.some(item=>item.id==='chlorineTabs'));
   assert.deepEqual(migrated.history,[]);
 });
 

@@ -36,7 +36,10 @@ test('manual readings produce conservative treatment guidance',async({page})=>{
   await expect(page.getByText("DON'T USE THE SPA YET")).toBeVisible();
   await page.getByRole('button',{name:'WHAT SHOULD I DO?'}).click();
   await expect(page.getByRole('heading',{name:'Raise free chlorine first'})).toBeVisible();
-  await expect(page.locator('.treatment-product span')).toContainText('0.29 oz');
+  await expect(page.locator('.treatment-product').first()).toContainText('Leisure Time Spa 56');
+  await expect(page.locator('.treatment-product').first()).toContainText('0.29 oz');
+  await expect(page.locator('.treatment-product').nth(1)).toContainText('Chlorine tablets');
+  await expect(page.locator('.treatment-product').nth(1)).toContainText('1 tablet');
 });
 
 test('maintenance settings schedule native reminders',async({page})=>{

@@ -768,10 +768,15 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
       </div>` : fixedRetest ? `
       <div class="callout success-callout"><strong>Next:</strong> Spa Coach will flag a retest in about ${escapeHtml(formatMinutes(plan.retestMinutes))} after you log this step.</div>` : '';
 
+      const productCards = (plan.products && plan.products.length
+        ? plan.products
+        : plan.product ? [{ name: plan.product, dose: plan.dose }] : []
+      ).map(item => `<div class="treatment-product">${item.label ? `<small>${escapeHtml(item.label)}</small>` : ''}<strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.dose || '')}</span></div>`).join('');
+
     c.innerHTML = `
       <h2 class="treatment-title">${escapeHtml(plan.title)}</h2>
       <p>${escapeHtml(plan.explanation)}</p>
-      ${plan.product ? `<div class="treatment-product"><strong>${escapeHtml(plan.product)}</strong><span>${escapeHtml(plan.dose)}</span></div>` : ''}
+      ${productCards}
       <ol class="instructions">${plan.steps.map(s=>`<li>${escapeHtml(s)}</li>`).join('')}</ol>
       ${plan.note ? `<div class="callout warn-callout">${escapeHtml(plan.note)}</div>` : ''}
       ${retestControl}
