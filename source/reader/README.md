@@ -1,17 +1,18 @@
 # Strip Reader
 
-Strip Reader is a camera-only product for AquaChek Silver 7-in-1 strips. It scans, confirms, and stores pad readings. It does not recommend chemicals, track inventory, or schedule spa maintenance.
+Strip Reader is a camera product for AquaChek Silver 7-in-1 strips. It scans, confirms, and stores pad readings, then recommends chemical *types* (granular chlorine, pH decreaser, and so on) without naming brands.
 
 Open it at `/reader/` in the same web server as Spa Coach.
 
 ## Shared scanner, two products
 
-Spa Coach stays the water-care coach. Strip Reader is the stripped-down scan app.
+Spa Coach stays the branded water-care coach. Strip Reader is the AquaChek-oriented scan app.
 
 Both load the same files:
 
 - `lib/scanner.js` — pad geometry, white balance, CIEDE2000 matching, wet prototypes, learned colors
 - `lib/scan-session.js` — photo downscale, auto-detect, full-resolution sampling, pad crops
+- `lib/chemistry.js` — Spa Coach uses branded `treatmentPlan`; Strip Reader uses `genericTreatmentPlan`
 
 Future scanner work in those files is inherited by both products. Do not copy scanner code into `reader/app.js`.
 
@@ -35,14 +36,15 @@ Keeping scanner logic in one module is the only way “all strip-reading changes
 - Phone camera reader for the Silver 7-in-1 pads people already buy
 - Local-only photos, auto-detect with manual fallback, bottle-chart review, learned lighting calibration
 - White-label path: they can rebrand the shell; the engine stays one codebase
-- Spa Coach remains a separate coach product
+- Generic chemical-class advice (no competing brand names on the AquaChek pitch)
+- Spa Coach remains a separate coach product with inventory-specific dosing
 
 ### What not to do
 
 - Do not ship this as “the AquaChek app” without a license. AquaChek® is their trademark.
 - Do not claim laboratory accuracy or certification. The scanner is experimental, same as Spa Coach.
 - Do not expect Hach to replace Connect or TruTest on the first meeting. The realistic ask is a trial, OEM license, or funded validation against their chart and wet strips.
-- Do not mix Spa Coach chemical advice into the AquaChek demo. That is a different product and a different liability.
+- Do not mix Spa Coach branded inventory advice into the AquaChek demo. Strip Reader already uses chemical classes only.
 
 ### Remaining gaps before a serious demo
 

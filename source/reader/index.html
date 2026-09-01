@@ -29,11 +29,11 @@
         <div class="card onboarding-card">
           <div class="step-kicker">WELCOME</div>
           <h2>Read an AquaChek Silver 7-in-1 strip with your phone</h2>
-          <p class="muted">Dip, photograph, and confirm the six pad values. This app does not recommend chemicals.</p>
+          <p class="muted">Dip, photograph, and confirm the six pad values. Next steps name chemical types, not brands.</p>
           <div class="onboarding-steps">
             <div><strong>1</strong><span><b>Dip one strip</b><small>Remove it immediately, keep it level, and wait 15 seconds.</small></span></div>
             <div><strong>2</strong><span><b>Photograph the pads</b><small>Automatic detection is editable, with manual back and undo.</small></span></div>
-            <div><strong>3</strong><span><b>Confirm the numbers</b><small>Compare uncertain pads to the bottle chart, then save the reading locally.</small></span></div>
+            <div><strong>3</strong><span><b>Confirm, then treat</b><small>Compare uncertain pads to the bottle chart, then follow generic chemical advice.</small></span></div>
           </div>
           <div class="callout warn-callout"><strong>Experimental reader.</strong> This is not an official AquaChek product and is not a certified water-testing instrument. Confirm anything that looks off against the bottle chart.</div>
           <button class="primary jumbo" id="finishOnboardingBtn">START READING STRIPS</button>
@@ -46,7 +46,7 @@
             <div>
               <div class="muted">Supported strip</div>
               <h2>AquaChek Silver 7-in-1</h2>
-              <div class="muted">6 reagent pads · read at 15 seconds</div>
+              <div class="muted" id="stripMeta">6 reagent pads · read at 15 seconds</div>
             </div>
           </div>
           <div id="homeStatus" class="status-panel neutral">
@@ -144,7 +144,8 @@
           <div id="useStatus" class="use-status caution">Checking…</div>
           <div id="resultRows" class="result-list"></div>
           <div id="scanWarnings"></div>
-          <button class="primary jumbo" id="saveReadingBtn">SAVE THIS READING</button>
+          <button class="primary jumbo" id="treatmentBtn">WHAT SHOULD I DO?</button>
+          <button class="secondary full" id="saveReadingBtn">SAVE THIS READING</button>
           <button class="secondary full" id="editReadingsBtn">Review / correct readings</button>
         </div>
       </section>
@@ -160,6 +161,16 @@
           <p class="muted small">Optional. Critical chlorine and pH readings still need a second look when confidence is low.</p>
           <div id="reviewValidation" class="callout bad-callout hidden" role="alert"></div>
           <button class="primary full" id="saveEditsBtn">USE THESE READINGS</button>
+        </div>
+      </section>
+
+      <section class="screen" id="treatmentScreen">
+        <button class="back-btn" data-go="resultsScreen">← Results</button>
+        <div class="card">
+          <div class="step-kicker">NEXT STEP</div>
+          <div id="treatmentContent"></div>
+          <button class="primary full" id="saveTreatmentBtn">SAVE THIS READING</button>
+          <button class="secondary full" id="skipTreatmentBtn">Save without treating</button>
         </div>
       </section>
 
@@ -195,8 +206,15 @@
         <button class="back-btn" data-go="homeScreen">← Home</button>
         <div class="card">
           <div class="step-kicker">SETTINGS</div>
-          <h2>About this reader</h2>
-          <p class="muted small" id="installHelp">Strip Reader is a camera-only product built from Spa Coach’s strip-reading engine. It does not dose chemicals, track inventory, or schedule spa maintenance.</p>
+          <h2>Water volume</h2>
+          <p class="muted small">Used only to scale generic chemical amounts. The label of the product you buy still wins.</p>
+          <label class="field">Volume (gallons)<input id="waterVolumeInput" type="number" min="1" value="500" /></label>
+          <button class="primary full" id="saveVolumeBtn">SAVE VOLUME</button>
+        </div>
+        <div class="card">
+          <div class="section-label">About</div>
+          <h2>This reader</h2>
+          <p class="muted small" id="installHelp">Strip Reader uses Spa Coach’s strip-reading engine and gives brand-free chemical class advice. It does not track inventory or schedule spa maintenance.</p>
           <h3 id="installedVersion">PHONE</h3>
           <p class="muted small">AquaChek® is a trademark of its owner. This app is an independent reader for AquaChek Silver 7-in-1 pads and is not affiliated with or endorsed by Hach Company.</p>
         </div>

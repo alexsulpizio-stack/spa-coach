@@ -10,11 +10,12 @@ const {
   analyzePadSamples,
   cropPadFromBitmap
 } = globalThis.SpaScanSession;
-const { classify, evaluateSafety, isChemistryConflict, num } = globalThis.SpaChemistry;
+const { classify, evaluateSafety, isChemistryConflict, num, genericTreatmentPlan } = globalThis.SpaChemistry;
 
 const STATE_KEY = 'spaStripReaderState';
 const DEFAULT_STATE = {
   onboardingComplete: false,
+  volume: 500,
   readings: null,
   scan: null,
   history: [],
@@ -49,6 +50,7 @@ const DEFAULT_STATE = {
       return {
         ...DEFAULT_STATE,
         ...saved,
+        volume: Math.max(1, Number(saved.volume) || DEFAULT_STATE.volume),
         history: Array.isArray(saved.history) ? saved.history.slice(-200) : [],
         scannerCalibrations: Array.isArray(saved.scannerCalibrations) ? saved.scannerCalibrations.slice(-72) : []
       };
@@ -416,6 +418,9 @@ const DEFAULT_STATE = {
     if (details.totalChlorine?.reason === 'chemistry-conflict' || isChemistryConflict(num(readings.totalChlorine), num(readings.freeChlorine))) warnings.push('Total chlorine cannot be lower than free chlorine. Correct the reading or mark Total Chlorine Unknown / skip.');
     if (state.scan?.detection?.flipped) warnings.push('The reader flipped pad 1–6 because the colors fit the bottle order better that way. Confirm the tip is pad 1.');
     $('scanWarnings').innerHTML = warnings.map(w=>`<div class="callout warn-callout">⚠️ ${w}</div>`).join('');
+    const criticalLow = ['freeChlorine','ph'].some(k => ['low','rejected','skipped'].includes(details[k]?.confidence) || details[k]?.invalid || readings[k] == null);
+    const chemistryConflict = isChemistryConflict(num(readings.totalChlorine), num(readings.freeChlorine));
+    $('treatmentBtn').textContent = (criticalLow || chemistryConflict) ? 'REVIEW READINGS FIRST' : 'WHAT SHOULD I DO?';
   }
 
   $('editReadingsBtn').onclick = () => { renderReadingForm(); showScreen('editScreen'); };
@@ -587,7 +592,41 @@ const DEFAULT_STATE = {
     saveState(); renderResults(); showScreen('resultsScreen');
   };
 
-  async function saveCurrentReading() {
+  $('treatmentBtn').onclick = () => {
+    const details = state.scan?.details || {};
+    const criticalLow = ['freeChlorine','ph'].some(k => ['low','rejected','skipped'].includes(details[k]?.confidence) || details[k]?.invalid || state.readings?.[k] == null);
+    const chemistryConflict = isChemistryConflict(num(state.readings?.totalChlorine), num(state.readings?.freeChlorine));
+    if (criticalLow || chemistryConflict) { renderReadingForm(); showScreen('editScreen'); return; }
+    renderTreatment();
+    showScreen('treatmentScreen');
+  };
+
+  function currentPlan() {
+    return genericTreatmentPlan(state.readings || {}, state.volume || DEFAULT_STATE.volume);
+  }
+
+  function renderTreatment() {
+    const plan = currentPlan();
+    state.currentPlan = plan;
+    const productCards = (plan.products && plan.products.length
+      ? plan.products
+      : plan.product ? [{ name: plan.product, dose: plan.dose }] : []
+    ).map(item => `<div class="treatment-product">${item.label ? `<small>${escapeHtml(item.label)}</small>` : ''}<strong>${escapeHtml(item.name)}</strong><span>${escapeHtml(item.dose || '')}</span></div>`).join('');
+    const retest = Number.isFinite(plan.retestMinutes)
+      ? `<div class="callout success-callout"><strong>Next:</strong> Retest in about ${plan.retestMinutes === 60 ? '1 hour' : `${plan.retestMinutes} minutes`} after you dose.</div>`
+      : '';
+    $('treatmentContent').innerHTML = `
+      <h2 class="treatment-title">${escapeHtml(plan.title)}</h2>
+      <p>${escapeHtml(plan.explanation)}</p>
+      ${productCards}
+      <ol class="instructions">${plan.steps.map(s=>`<li>${escapeHtml(s)}</li>`).join('')}</ol>
+      ${plan.note ? `<div class="callout warn-callout">${escapeHtml(plan.note)}</div>` : ''}
+      ${retest}
+      <p class="muted small">Recommendations name chemical types only. Use any brand whose label matches that type, and follow that label.</p>
+    `;
+  }
+
+  async function saveCurrentReading(plan = null) {
     const safety = evaluateSafety(state.readings || {}, state.scan?.details || {});
     const id = crypto.randomUUID?.() || String(Date.now());
     const at = new Date().toISOString();
@@ -609,6 +648,7 @@ const DEFAULT_STATE = {
       scanDetails: historyDetails,
       scanVersion: state.scan?.version || APP_VERSION,
       safety,
+      plan: plan?.title || null,
       photoSaved
     });
     state.history = state.history.slice(0, 200);
@@ -617,7 +657,19 @@ const DEFAULT_STATE = {
   }
   $('saveReadingBtn').onclick = async () => {
     const hadPhoto = Boolean(currentPhotoFullBlob);
-    const photoSaved = await saveCurrentReading();
+    const photoSaved = await saveCurrentReading(currentPlan());
+    showScreen('homeScreen');
+    if (hadPhoto && !photoSaved) setTimeout(() => alert('The reading was saved, but the strip photo could not be stored on this device.'), 50);
+  };
+  $('saveTreatmentBtn').onclick = async () => {
+    const hadPhoto = Boolean(currentPhotoFullBlob);
+    const photoSaved = await saveCurrentReading(state.currentPlan || currentPlan());
+    showScreen('homeScreen');
+    if (hadPhoto && !photoSaved) setTimeout(() => alert('The reading was saved, but the strip photo could not be stored on this device.'), 50);
+  };
+  $('skipTreatmentBtn').onclick = async () => {
+    const hadPhoto = Boolean(currentPhotoFullBlob);
+    const photoSaved = await saveCurrentReading(null);
     showScreen('homeScreen');
     if (hadPhoto && !photoSaved) setTimeout(() => alert('The reading was saved, but the strip photo could not be stored on this device.'), 50);
   };
@@ -638,6 +690,7 @@ const DEFAULT_STATE = {
       panel.className = 'status-panel neutral';
       panel.innerHTML = '<div class="status-title">No strip scanned yet</div><div class="status-copy">Photograph a fresh strip to see hardness, chlorine, pH, alkalinity, and CYA.</div>';
     }
+    if ($('stripMeta')) $('stripMeta').textContent = `6 reagent pads · read at 15 seconds · ${state.volume || DEFAULT_STATE.volume} gal`;
     renderHistoryInto($('recentHistory'), state.history.slice(0, 3));
   }
   function renderHistory() { renderHistoryInto($('historyList'), state.history); }
@@ -664,6 +717,7 @@ const DEFAULT_STATE = {
       return `<div class="history-entry ${safety.level}">
         <div class="history-entry-top"><div><div class="history-entry-title">Strip reading</div><div class="history-entry-meta">${formatDateTime(h.at)}</div></div><span class="history-safety ${safety.level}">${escapeHtml(safety.title)}</span></div>
         <div class="history-reading-grid">${resultBits}</div>
+        ${h.plan?`<div class="history-entry-detail">${escapeHtml(h.plan)}</div>`:''}
         ${photoBlock}
       </div>`;
     }).join('');
@@ -785,12 +839,18 @@ const DEFAULT_STATE = {
       if ($('headerVersion')) $('headerVersion').textContent = `PHONE v${APP_VERSION}`;
       document.title = `Strip Reader PHONE v${APP_VERSION}`;
     }
+    if ($('waterVolumeInput')) $('waterVolumeInput').value = state.volume || DEFAULT_STATE.volume;
     const calibrationCount = (state.scannerCalibrations || []).length;
     $('calibrationSummary').textContent = calibrationCount
       ? `${calibrationCount} learned color${calibrationCount===1?'':'s'} saved locally. Reset them if scanner results become less accurate.`
       : 'No learned colors saved.';
     $('resetCalibrationsBtn').disabled = calibrationCount === 0;
   }
+  $('saveVolumeBtn').onclick = () => {
+    state.volume = Math.max(1, Number($('waterVolumeInput').value) || DEFAULT_STATE.volume);
+    saveState();
+    showScreen('homeScreen');
+  };
   $('resetCalibrationsBtn').onclick = () => {
     if (!confirm('Reset all learned strip colors? Printed and built-in wet references will remain.')) return;
     state.scannerCalibrations = [];

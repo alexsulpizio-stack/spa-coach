@@ -2,12 +2,12 @@
 
 Spa Coach is a local-first hot-tub water testing and maintenance coach. The browser app and Android WebView use the same canonical web source in this directory.
 
-The strip-only product lives at [`reader/`](reader/). It uses the same `lib/scanner.js` and `lib/scan-session.js` engine as Spa Coach, so pad-reading changes land in both apps.
+The strip-only product lives at [`reader/`](reader/). It uses the same `lib/scanner.js` and `lib/scan-session.js` engine as Spa Coach, so pad-reading changes land in both apps. Strip Reader also uses `genericTreatmentPlan` in `lib/chemistry.js` so chemical advice stays brand-free.
 
 ## New in v0.9.8
 
 - Shared strip-reading session (`lib/scan-session.js`) used by Spa Coach and Strip Reader
-- Strip Reader at `/reader/`: scan, confirm, and save AquaChek Silver 7-in-1 readings without chemical coaching
+- Strip Reader at `/reader/`: scan AquaChek Silver 7-in-1 pads and recommend chemical *types* (not brands)
 
 ## New in v0.9.7
 

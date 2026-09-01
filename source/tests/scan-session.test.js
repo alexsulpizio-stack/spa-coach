@@ -64,5 +64,5 @@ test('spa-coach and strip reader both import the shared scanner files', async ()
   assert.match(spa, /lib\/scan-session\.js/);
   assert.match(reader, /\.\.\/lib\/scanner\.js/);
   assert.match(reader, /\.\.\/lib\/scan-session\.js/);
-  assert.doesNotMatch(reader, /treatmentBtn|logFilterBtn|inventoryEditor/);
+  assert.doesNotMatch(reader, /logFilterBtn|inventoryEditor/);
 });

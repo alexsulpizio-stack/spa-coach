@@ -74,6 +74,21 @@ test('pH correction retains conservative incremental dosing', () => {
   assert.match(plan.dose, /0\.5 oz/);
 });
 
+test('generic treatment names chemical classes, not brands', () => {
+  const { genericTreatmentPlan } = globalThis.SpaChemistry;
+  const brand = /Leisure Time|Spa 56|SpaChoice|AquaDoc|Spa Up|Intex/;
+  const lowChlorine = genericTreatmentPlan({ freeChlorine: 2, ph: 7.4 }, 290);
+  assert.equal(lowChlorine.product, 'Chlorine sanitizer (granules)');
+  assert.equal(lowChlorine.products[1].name, 'Chlorine tablets');
+  assert.doesNotMatch(JSON.stringify(lowChlorine), brand);
+  const highPh = genericTreatmentPlan({ freeChlorine: 5, ph: 8.2 }, 290);
+  assert.equal(highPh.product, 'pH decreaser');
+  assert.doesNotMatch(JSON.stringify(highPh), brand);
+  const highChlorine = genericTreatmentPlan({ freeChlorine: 12, ph: 7.4 }, 500);
+  assert.equal(highChlorine.product, 'Chlorine neutralizer');
+  assert.doesNotMatch(JSON.stringify(highChlorine), brand);
+});
+
 test('unresolved issues retain sanitizer-first priority', () => {
   assert.deepEqual(
     unresolvedIssuesFor({ freeChlorine: 2, ph: 8.2, alkalinity: 40 }).map(issue => issue.key),
