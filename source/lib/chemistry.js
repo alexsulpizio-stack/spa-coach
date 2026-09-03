@@ -63,6 +63,11 @@ function chlorineTabDose(gallons, inventory) {
   return `${count} ${noun} in a floating feeder for ${gallons} gal`;
 }
 
+function ouncesWithGrams(ounces, decimals = 2) {
+  const value = Number(ounces);
+  return `${value.toFixed(decimals)} oz (${(value * 28.3495).toFixed(1)} g)`;
+}
+
 function treatmentPlan(readings, gallons, inventory = []) {
   const freeChlorine = num(readings.freeChlorine);
   const ph = num(readings.ph);
@@ -85,11 +90,11 @@ function treatmentPlan(readings, gallons, inventory = []) {
       title: 'High chlorine: wait, or optionally neutralize',
       explanation: `Free chlorine is ${freeChlorine} ppm, above the app's 3–10 ppm use range. Waiting uncovered with circulation is the default. Neutralizer is an optional faster correction.`,
       product: inventoryName(inventory, 'neutralizer', 'AquaDoc Chlorine Neutralizer'),
-      dose: `Conservative starting dose for ${gallons} gal: about ${startingDose.toFixed(2)} oz (${(startingDose * 28.3495).toFixed(1)} g). This is half the calculated amount to approach 5 ppm.`,
+      dose: `Conservative starting dose for ${gallons} gal: about ${ouncesWithGrams(startingDose)}. This is half the calculated amount to approach 5 ppm.`,
       products: [
-        { label: 'Optional faster correction', name: inventoryName(inventory, 'neutralizer', 'AquaDoc Chlorine Neutralizer'), dose: `Conservative starting dose for ${gallons} gal: about ${startingDose.toFixed(2)} oz (${(startingDose * 28.3495).toFixed(1)} g)` }
+        { label: 'Optional faster correction', name: inventoryName(inventory, 'neutralizer', 'AquaDoc Chlorine Neutralizer'), dose: `Conservative starting dose for ${gallons} gal: about ${ouncesWithGrams(startingDose)}` }
       ],
-      steps: ['Do not use the hot tub while free chlorine is above 10 ppm.', 'Confirm the reading with a fresh strip and remove any chlorine tablet feeder.', `If choosing neutralizer, weigh about ${startingDose.toFixed(2)} oz (${(startingDose * 28.3495).toFixed(1)} g) and add it according to the label with circulation running.`, 'Wait 1 hour and retest before adding any more.', 'Alternatively, add nothing, leave the cover open safely, circulate, and let chlorine fall naturally.'],
+      steps: ['Do not use the hot tub while free chlorine is above 10 ppm.', 'Confirm the reading with a fresh strip and remove any chlorine tablet feeder.', `If choosing neutralizer, weigh about ${ouncesWithGrams(startingDose)} and add it according to the label with circulation running.`, 'Wait 1 hour and retest before adding any more.', 'Alternatively, add nothing, leave the cover open safely, circulate, and let chlorine fall naturally.'],
       note: 'Never mix spa chemicals. Spa Coach uses AquaDoc’s published guide of about 1 oz per 1 ppm per 10,000 gallons, then starts at half the calculated dose because strips and water volume are approximate.'
     };
   }
@@ -98,13 +103,13 @@ function treatmentPlan(readings, gallons, inventory = []) {
     title: 'Raise free chlorine first',
     explanation: `Free chlorine is ${freeChlorine} ppm. Use ${sanitizerName} now to bring sanitizer up. After it is in the 3–10 ppm range, a chlorine tab in a floater can hold it between tests.`,
     product: sanitizerName,
-    dose: `Label-scaled regular dose for ${gallons} gal: about ${sanitizerDose} oz`,
+    dose: `Label-scaled regular dose for ${gallons} gal: about ${ouncesWithGrams(sanitizerDose)}`,
     products: [
-      { label: 'Raise now', name: sanitizerName, dose: `Label-scaled regular dose for ${gallons} gal: about ${sanitizerDose} oz` },
+      { label: 'Raise now', name: sanitizerName, dose: `Label-scaled regular dose for ${gallons} gal: about ${ouncesWithGrams(sanitizerDose)}` },
       { label: 'Then hold', name: tabName, dose: tabDose }
     ],
     steps: [
-      `Measure about ${sanitizerDose} oz of ${sanitizerName}.`,
+      `Measure about ${ouncesWithGrams(sanitizerDose)} of ${sanitizerName}.`,
       'Add it according to the product label with circulation running.',
       'Circulate for 5 minutes and retest free chlorine before using the spa or adding more.',
       `When free chlorine is 3–10 ppm, add ${tabCount === 1 ? '1 tablet' : `${tabCount} tablets`} to a floating feeder. Do not drop tabs on the spa floor or next to metal fittings.`,
@@ -116,8 +121,8 @@ function treatmentPlan(readings, gallons, inventory = []) {
   if (Number.isFinite(ph) && ph > 7.8) return {
     action: 'dose', focus: 'pH', followUpTitle: 'Retest pH and alkalinity', retestMinutes: 30,
     title: 'Lower pH', explanation: `pH is ${ph}, above the desired range.`,
-    product: 'SpaChoice pH Decreaser', dose: 'Start with 0.5 oz, per the bottle’s incremental-dose directions',
-    steps: ['Turn on the blower or filter.', 'Premix 0.5 oz of product with water in a plastic pail.', 'Add the diluted product to the spa.', 'Wait 30 minutes and retest.', 'Do not exceed 1 oz at one time.'],
+    product: 'SpaChoice pH Decreaser', dose: `Start with ${ouncesWithGrams(0.5, 1)}, per the bottle’s incremental-dose directions`,
+    steps: ['Turn on the blower or filter.', `Premix ${ouncesWithGrams(0.5, 1)} of product with water in a plastic pail.`, 'Add the diluted product to the spa.', 'Wait 30 minutes and retest.', `Do not exceed ${ouncesWithGrams(1, 0)} at one time.`],
     note: 'This product can also lower total alkalinity, so retest both before another dose.'
   };
   if (Number.isFinite(ph) && ph < 7.2) {
@@ -125,8 +130,8 @@ function treatmentPlan(readings, gallons, inventory = []) {
     return {
       action: 'dose', focus: 'pH', followUpTitle: 'Retest pH and alkalinity', retestMinutes: 60,
       title: 'Raise pH', explanation: `pH is ${ph}.`, product: inventoryName(inventory, 'raise', 'Leisure Time Spa Up'),
-      dose: `Label-scaled dose for ${gallons} gal: about ${dose} oz`,
-      steps: [`Measure about ${dose} oz of Spa Up.`, 'Add it according to the product label.', 'Circulate the water.', 'Retest before adding another dose.'],
+      dose: `Label-scaled dose for ${gallons} gal: about ${ouncesWithGrams(dose)}`,
+      steps: [`Measure about ${ouncesWithGrams(dose)} of Spa Up.`, 'Add it according to the product label.', 'Circulate the water.', 'Retest before adding another dose.'],
       note: 'Spa Up also affects total alkalinity, which is why the app retests instead of calculating a large one-shot correction.'
     };
   }

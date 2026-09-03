@@ -1,6 +1,10 @@
-# Spa Coach PHONE v0.9.7
+# Spa Coach PHONE v0.9.8
 
 Spa Coach is a local-first hot-tub water testing and maintenance coach. The browser app and Android WebView use the same canonical web source in this directory.
+
+## New in v0.9.8
+
+- Powder doses show grams in parentheses next to ounces so a kitchen scale can be used without converting
 
 ## New in v0.9.7
 
