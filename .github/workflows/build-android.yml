@@ -38,7 +38,11 @@ jobs:
 
       - name: Test web domain logic
         working-directory: source
-        run: npm test && npm run test:e2e && npm run verify:release
+        run: npm test && npm run test:e2e && npm run verify:version
+
+      - name: Decide whether this commit is a new release
+        id: release
+        run: node source/scripts/verify-version.mjs --github-publish
 
       - uses: android-actions/setup-android@v3
 
@@ -77,6 +81,7 @@ jobs:
           echo "SHA256=$SHA256" >> "$GITHUB_ENV"
 
       - name: Prepare signed OTA manifest
+        if: steps.release.outputs.publish == 'true'
         shell: bash
         env:
           SPA_COACH_KEYSTORE: ${{ runner.temp }}/spa-coach.keystore
@@ -102,7 +107,13 @@ jobs:
           export SIGNATURE
           node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1]));m.signature={alg:"RS256",value:process.env.SIGNATURE};fs.writeFileSync("update.json",JSON.stringify(m,null,2)+"\n")' "$RUNNER_TEMP/update-unsigned.json"
 
+      - name: Confirm unpublished version
+        if: steps.release.outputs.publish == 'true'
+        working-directory: source
+        run: npm run verify:release
+
       - name: Publish immutable release and activate OTA
+        if: steps.release.outputs.publish == 'true'
         shell: bash
         env:
           GH_TOKEN: ${{ github.token }}
