@@ -5,6 +5,7 @@ const ASSETS = [
   './', './index.html', './styles.css', './app.js', './manifest.webmanifest',
   './lib/version.js', './lib/state.js', './lib/photo-store.js', './lib/native-bridge.js',
   './lib/scanner.js', './lib/chemistry.js', './lib/followup.js', './lib/reminders.js', './lib/backup.js',
+  './lib/formatting.js',
   './icon-192.png', './icon-512.png', './apple-touch-icon.png'
 ];
 self.addEventListener('install', event => {
