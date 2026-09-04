@@ -30,6 +30,6 @@ jobs:
       - name: Verify version, domain logic, UI, and accessibility
         working-directory: source
         run: |
-          npm run verify:release
+          npm run verify:version
           npm test
           npm run test:e2e
