@@ -22,6 +22,7 @@ const {
 const { formatMinutes, makeFollowUp } = globalThis.SpaFollowUp;
 const { futureRelative, maintenanceDue, maintenanceDueAt } = globalThis.SpaReminders;
 const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
+const { formatDate, formatDateTime, relativeTime } = globalThis.SpaFormatting;
 
 (() => {
   'use strict';
@@ -1259,13 +1260,6 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     $('stripCameraInput').value=''; $('stripGalleryInput').value=''; taps=[]; sampled=[]; sourceImage=null; sourcePixels=null; autoDetectionActive=false; autoDetectionInfo=null;
     currentPhotoFullBlob=null; currentPhotoThumbBlob=null; currentViewedPhotoId=null; currentWorkingPhotoId=null;
   }
-  function relativeTime(iso) {
-    if (!iso) return 'recently';
-    const ms=Date.now()-new Date(iso).getTime(), min=Math.round(ms/60000);
-    if (min<1) return 'just now'; if (min<60) return `${min} min ago`;
-    const h=Math.round(min/60); if (h<24) return `${h} hr ago`;
-    return formatDate(iso);
-  }
   function maintenanceStatus(lastDone, days, label) {
     if (!lastDone) return `No ${label} logged yet. Reminder begins when you log one.`;
     const due=maintenanceDueAt(lastDone, days);
@@ -1285,8 +1279,6 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     el.innerHTML=items.map(([name,enabled,due])=>`<div class="maintenance-tile ${enabled?due.level:'neutral'}"><strong>${escapeHtml(name)}</strong><span>${enabled?escapeHtml(due.label):'Reminder off'}</span></div>`).join('')+
       `<div class="maintenance-tile ${low.length?'caution':'good'}"><strong>Chemical stock</strong><span>${low.length?`${low.length} low: ${low.map(i=>escapeHtml(i.name)).join(', ')}`:'Stock levels look good'}</span></div>`;
   }
-  function formatDate(iso) { return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',year:'numeric'}).format(new Date(iso)); }
-  function formatDateTime(iso) { return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(iso)); }
   function escapeHtml(s) { return String(s ?? '').replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c])); }
 
   setInterval(() => {
