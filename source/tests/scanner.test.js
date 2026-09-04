@@ -149,6 +149,18 @@ test('vertical six-pad geometry is detected from a deterministic mask',()=>{
   assert.notEqual(result?.confidence,'low');
 });
 
+test('horizontal six-pad geometry is detected from a deterministic mask',()=>{
+  const width=180,height=45,mask=new Uint8Array(width*height);
+  for(const center of [15,45,75,105,135,165]){
+    for(let y=18;y<=28;y++)for(let x=center-4;x<=center+4;x++)mask[y*width+x]=1;
+  }
+  const result=detectPadsAlongAxis(mask,width,height,'horizontal');
+  assert.equal(result?.points.length,6);
+  assert.equal(result?.orientation,'horizontal');
+  assert.ok(['high','medium'].includes(result?.confidence));
+  assert.notEqual(result?.confidence,'low');
+});
+
 test('irregular pad spacing reports low geometry confidence',()=>{
   const width=45,height=180,mask=new Uint8Array(width*height);
   for(const center of [12,28,50,95,130,168]){
