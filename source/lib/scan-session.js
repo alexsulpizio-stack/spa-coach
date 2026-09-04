@@ -25,6 +25,32 @@ function pickBestDetection(vertical, horizontal) {
   return vertical || horizontal || null;
 }
 
+function detectOnMask(mask, width, height) {
+  return pickBestDetection(
+    detectPadsAlongAxis(mask, width, height, 'vertical'),
+    detectPadsAlongAxis(mask, width, height, 'horizontal')
+  );
+}
+
+function dilateMask(mask, width, height) {
+  const expanded = new Uint8Array(mask.length);
+  for (let y = 0; y < height; y++) {
+    for (let x = 0; x < width; x++) {
+      if (!mask[y * width + x]) continue;
+      for (let dy = -1; dy <= 1; dy++) {
+        const yy = y + dy;
+        if (yy < 0 || yy >= height) continue;
+        for (let dx = -1; dx <= 1; dx++) {
+          const xx = x + dx;
+          if (xx < 0 || xx >= width) continue;
+          expanded[yy * width + xx] = 1;
+        }
+      }
+    }
+  }
+  return expanded;
+}
+
 function detectPadsFromPixels(data, width, height) {
   if (!hasUsableRgba(data, width, height)) return null;
   width = Math.floor(width);
@@ -33,9 +59,12 @@ function detectPadsFromPixels(data, width, height) {
   for (let i = 0, p = 0; p < mask.length; i += 4, p++) {
     mask[p] = colorCandidate(data[i], data[i + 1], data[i + 2]) ? 1 : 0;
   }
-  const vertical = detectPadsAlongAxis(mask, width, height, 'vertical');
-  const horizontal = detectPadsAlongAxis(mask, width, height, 'horizontal');
-  return pickBestDetection(vertical, horizontal);
+  const primary = detectOnMask(mask, width, height);
+  if (primary) return primary;
+  // A 90-degree image resize can thin narrow colored pads enough to split a
+  // candidate run. A single-pixel dilation restores continuity without
+  // changing the geometry scoring rules or accepting blank images.
+  return detectOnMask(dilateMask(mask, width, height), width, height);
 }
 
 function scalePoints(points, fromWidth, fromHeight, toWidth, toHeight) {
