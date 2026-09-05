@@ -1,13 +1,13 @@
 {
-  "versionCode": 98,
-  "versionName": "0.9.8",
+  "versionCode": 99,
+  "versionName": "0.9.9",
   "packageName": "com.spacoach.app",
-  "apkUrl": "https://github.com/alexsulpizio-stack/spa-coach/releases/download/v0.9.8/Spa-Coach-v0.9.8.apk",
-  "apkSha256": "82eedebd6a1fe85ba7f1ba47c832afab43197dba1f215197a4696161f7cdfcbb",
+  "apkUrl": "https://github.com/alexsulpizio-stack/spa-coach/releases/download/v0.9.9/Spa-Coach-v0.9.9.apk",
+  "apkSha256": "30ac9856561e05da8bd5eb157090586b9ee05e81e644254b43f2b38a6872672b",
   "signingCertSha256": "2fdaca693d5d6a3f20a470ee64c20f300dd70649d80a3fad2820eb1b81e2d810",
-  "notes": "Automated Spa Coach Android release v0.9.8.",
+  "notes": "Automated Spa Coach Android release v0.9.9.",
   "signature": {
     "alg": "RS256",
-    "value": "DN8z3d7ZQBPmzf+f3+502d+aqNiL4edk91Zw09oe54J6ivVOT+2XL6Y9elXtxPSE5qepTEPN4vwCcra7wGoJALzFEn7/xcVIUUbzhaQLlgfLK1OfNbR5ZYVHBbiG/B/uDOv7fxqJJu0v+6Z6P+TKyYHfCRvfimJNIajfFyDSTbccXldLY0AbI5q88sY/MVt+GkkMJHNt8xFc5+oJXgza8v0icTnNmtB+KtelN7drfVSXLGf4NwYGBSitwF+bXH1CgmBBtKR5SNtczFbYRcJRnJ0SkLSweAh3ewjD7+OrsVgX6j3k5ZkduWhiCq7GxDVpeDorLfyyhR1qPCkTK/g7GQ=="
+    "value": "A4z53Xcm5Nd4Icwv7HDDQ97PEd+NkrR9p8mVm00w6VgyIV3HDXsYPaXE6NA24DTqC6gLdrVNbQMc7XJYKXmWw60ibCw9jwqqPCCzNWI9Ntg183cU3hf/bmUmWjzmDK6ICYU41cALlv2ktzATWxu4z1ngLv/Eeoy4Jr7p4Xa/pOpVrWygSYouhDeSogspOspvGi/gMZxQ1tKxf2eXRzgy37Tfb49wJ9Oi0uwVs3oZLtmer1MXksASELABXLxvS1Ino9H3RCSwfeDHxVTQ3VqcTQ82YQalHGd/X7YdDs6MKsoiUlwDUiCA9k/5emnlmjU8KmOTnmksIEpBkadbxg87TQ=="
   }
 }
