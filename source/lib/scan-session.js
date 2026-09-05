@@ -148,7 +148,7 @@ function assessPadGlare(sourcePixels, sourcePoints) {
   let maxRatio = 0;
   points.forEach((point, index) => {
     const cx = Math.round(point.x), cy = Math.round(point.y);
-    let total = 0, clipped = 0, colorSupport = 0;
+    let total = 0, clipped = 0, usableSupport = 0;
     for (let y = Math.max(0, cy-radius); y <= Math.min(height-1, cy+radius); y++) {
       for (let x = Math.max(0, cx-radius); x <= Math.min(width-1, cx+radius); x++) {
         const dx=x-cx, dy=y-cy;
@@ -158,14 +158,17 @@ function assessPadGlare(sourcePixels, sourcePoints) {
         const maximum=Math.max(r,g,b), minimum=Math.min(r,g,b);
         total++;
         if (minimum>=248 && maximum-minimum<=8) clipped++;
-        else if (maximum-minimum>18 && maximum<248 && minimum>8) colorSupport++;
+        else if (maximum<248 && minimum>8) usableSupport++;
       }
     }
     const ratio = total ? clipped / total : 0;
     maxRatio = Math.max(maxRatio, ratio);
-    const enoughColor = colorSupport >= Math.max(12, Math.round(total * .08));
+    // Some valid pads, especially low free-chlorine swatches, are intentionally
+    // pale and have little chroma. Require a localized clipped highlight plus
+    // surrounding non-clipped pixels instead of requiring saturated color.
+    const enoughSupport = usableSupport >= Math.max(12, Math.round(total * .08));
     const enoughGlare = clipped >= Math.max(8, Math.round(total * .04));
-    if (enoughColor && enoughGlare && ratio >= .04) {
+    if (enoughSupport && enoughGlare && ratio >= .04 && ratio <= .65) {
       affected.push({ index, ratio: Math.round(ratio * 1000) / 1000, clipped, total });
     }
   });
