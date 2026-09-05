@@ -136,12 +136,73 @@ function samplePadsAtSourcePoints(sourcePixels, sourcePoints) {
   );
 }
 
+function assessPadGlare(sourcePixels, sourcePoints) {
+  const points = Array.isArray(sourcePoints) ? sourcePoints : [];
+  if (!sourcePixels || !hasUsableRgba(sourcePixels.data, sourcePixels.width, sourcePixels.height) || !points.length) {
+    return { detected:false, affected:[], maxRatio:0 };
+  }
+  const { data, width, height } = sourcePixels;
+  const minDim = Math.min(width, height);
+  const radius = Math.max(8, Math.min(18, Math.round(minDim * .0055)));
+  const affected = [];
+  let maxRatio = 0;
+  points.forEach((point, index) => {
+    const cx = Math.round(point.x), cy = Math.round(point.y);
+    let total = 0, clipped = 0, usableSupport = 0;
+    for (let y = Math.max(0, cy-radius); y <= Math.min(height-1, cy+radius); y++) {
+      for (let x = Math.max(0, cx-radius); x <= Math.min(width-1, cx+radius); x++) {
+        const dx=x-cx, dy=y-cy;
+        if (dx*dx+dy*dy > radius*radius) continue;
+        const i=(y*width+x)*4;
+        const r=data[i], g=data[i+1], b=data[i+2];
+        const maximum=Math.max(r,g,b), minimum=Math.min(r,g,b);
+        total++;
+        if (minimum>=248 && maximum-minimum<=8) clipped++;
+        else if (maximum<248 && minimum>8) usableSupport++;
+      }
+    }
+    const ratio = total ? clipped / total : 0;
+    maxRatio = Math.max(maxRatio, ratio);
+    // Some valid pads, especially low free-chlorine swatches, are intentionally
+    // pale and have little chroma. Require a localized clipped highlight plus
+    // surrounding non-clipped pixels instead of requiring saturated color.
+    const enoughSupport = usableSupport >= Math.max(12, Math.round(total * .08));
+    const enoughGlare = clipped >= Math.max(8, Math.round(total * .04));
+    if (enoughSupport && enoughGlare && ratio >= .04 && ratio <= .65) {
+      affected.push({ index, ratio: Math.round(ratio * 1000) / 1000, clipped, total });
+    }
+  });
+  return { detected:affected.length>0, affected, maxRatio:Math.round(maxRatio*1000)/1000 };
+}
+
 function analyzePadSamples(sampled, sourcePixels, sourcePoints, learnedCalibrations = []) {
   const points = Array.isArray(sourcePoints) ? sourcePoints : [];
   const whitePoint = sourcePixels && hasUsableRgba(sourcePixels.data, sourcePixels.width, sourcePixels.height)
     ? estimateWhitePoint(sourcePixels.data, sourcePixels.width, sourcePixels.height, points)
     : null;
-  return { ...buildPadReadings(sampled, learnedCalibrations, { whitePoint }), whitePoint };
+  const glare = assessPadGlare(sourcePixels, points);
+  const result = buildPadReadings(sampled, learnedCalibrations, { whitePoint });
+  if (glare.detected) {
+    const keys = Object.keys(result.readings);
+    glare.affected.forEach(item => {
+      const padIndex = result.flipped ? keys.length - 1 - item.index : item.index;
+      const key = keys[padIndex];
+      if (!key || !result.details[key]) return;
+      result.details[key] = {
+        ...result.details[key],
+        invalid:true,
+        reason:'glare',
+        confidence:'rejected',
+        candidate:result.readings[key],
+        glareRatio:item.ratio
+      };
+      result.readings[key] = null;
+    });
+    if (typeof globalThis.alert === 'function') {
+      globalThis.alert('Glare detected on one or more test-strip pads. Change the phone angle or move away from direct light, then retake the photo. Keep the flash off and use diffuse light.');
+    }
+  }
+  return { ...result, whitePoint, glare };
 }
 
 function cropPadFromBitmap(sourceImage, canvasX, canvasY, canvasWidth, canvasHeight) {
@@ -178,6 +239,7 @@ globalThis.SpaScanSession = Object.freeze({
   scalePoints,
   sourcePointFromCanvas,
   samplePadsAtSourcePoints,
+  assessPadGlare,
   analyzePadSamples,
   cropPadFromBitmap
 });
