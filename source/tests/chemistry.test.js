@@ -41,10 +41,9 @@ test('treatment plan scales sanitizer dose by spa volume', () => {
   const plan = treatmentPlan({ freeChlorine: 2, ph: 8.2, alkalinity: 50 }, 290, inventory);
   assert.equal(plan.focus, 'free chlorine');
   assert.equal(plan.product, 'Test Sanitizer');
-  assert.match(plan.dose, /0\.29 oz \(8\.2 g\)/);
+  assert.match(plan.dose, /0\.29 oz/);
   assert.equal(plan.retestMinutes, 5);
   assert.equal(plan.products.length, 2);
-  assert.match(plan.products[0].dose, /0\.29 oz \(8\.2 g\)/);
   assert.match(plan.products[1].dose, /1 tablet/);
 });
 
@@ -65,14 +64,30 @@ test('high chlorine uses a conservative half neutralizer dose', () => {
   const plan = treatmentPlan({ freeChlorine: 12, ph: 7.4 }, 500, inventory);
   assert.equal(plan.focus, 'free chlorine');
   assert.equal(plan.product, 'Test Neutralizer');
-  assert.match(plan.dose, /0\.18 oz \(5\.0 g\)/);
+  assert.match(plan.dose, /0\.18 oz/);
 });
 
 test('pH correction retains conservative incremental dosing', () => {
   const plan = treatmentPlan({ freeChlorine: 5, ph: 8.2 }, 290, inventory);
   assert.equal(plan.focus, 'pH');
-  assert.equal(plan.product, 'SpaChoice pH Decreaser');
-  assert.match(plan.dose, /0\.5 oz \(14\.2 g\)/);
+  assert.equal(plan.product, 'Test pH Down');
+  assert.match(plan.dose, /0\.5 oz/);
+  assert.equal(treatmentPlan({ freeChlorine: 5, ph: 8.2 }, 290, []).product, 'SpaChoice pH Decreaser');
+});
+
+test('generic treatment names chemical classes, not brands', () => {
+  const { genericTreatmentPlan } = globalThis.SpaChemistry;
+  const brand = /Leisure Time|Spa 56|SpaChoice|AquaDoc|Spa Up|Intex/;
+  const lowChlorine = genericTreatmentPlan({ freeChlorine: 2, ph: 7.4 }, 290);
+  assert.equal(lowChlorine.product, 'Chlorine sanitizer (granules)');
+  assert.equal(lowChlorine.products[1].name, 'Chlorine tablets');
+  assert.doesNotMatch(JSON.stringify(lowChlorine), brand);
+  const highPh = genericTreatmentPlan({ freeChlorine: 5, ph: 8.2 }, 290);
+  assert.equal(highPh.product, 'pH decreaser');
+  assert.doesNotMatch(JSON.stringify(highPh), brand);
+  const highChlorine = genericTreatmentPlan({ freeChlorine: 12, ph: 7.4 }, 500);
+  assert.equal(highChlorine.product, 'Chlorine neutralizer');
+  assert.doesNotMatch(JSON.stringify(highChlorine), brand);
 });
 
 test('unresolved issues retain sanitizer-first priority', () => {

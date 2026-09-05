@@ -385,8 +385,7 @@ function colorCandidate(r,g,b) {
 function detectPadsAlongAxis(mask,width,height,orientation) {
   const vertical=orientation==='vertical',minorLength=vertical?width:height,majorLength=vertical?height:width;
   const counts=new Float32Array(minorLength);
-  if(vertical)for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(mask[y*width+x])counts[x]++;
-  else for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(mask[y*width+x])counts[y]++;
+  for(let y=0;y<height;y++)for(let x=0;x<width;x++)if(mask[y*width+x])counts[vertical?x:y]++;
   const windowSize=Math.max(7,Math.round(minorLength*.045)),halfWindow=Math.floor(windowSize/2);
   let bestMinor=-1,bestSmooth=-1;
   for(let i=Math.round(minorLength*.04);i<Math.round(minorLength*.96);i++){

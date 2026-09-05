@@ -1,0 +1,250 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <meta name="theme-color" content="#0b6574" />
+  <meta name="mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="default" />
+  <meta name="apple-mobile-web-app-title" content="Strip Reader" />
+  <link rel="apple-touch-icon" href="../apple-touch-icon.png" />
+  <title>Strip Reader</title>
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="stylesheet" href="../styles.css" />
+</head>
+<body>
+  <a class="skip-link" href="#main">Skip to main content</a>
+  <div class="app-shell">
+    <header class="topbar">
+      <div>
+        <div class="eyebrow">CAMERA STRIP READER · <strong id="headerVersion">PHONE</strong></div>
+        <h1>Strip Reader</h1>
+      </div>
+      <button class="icon-btn" id="settingsBtn" aria-label="Open settings">⚙️</button>
+    </header>
+
+    <main id="main">
+      <section class="screen" id="onboardingScreen">
+        <div class="card onboarding-card">
+          <div class="step-kicker">WELCOME</div>
+          <h2>Read an AquaChek Silver 7-in-1 strip with your phone</h2>
+          <p class="muted">Dip, photograph, and confirm the six pad values. Next steps name chemical types, not brands.</p>
+          <div class="onboarding-steps">
+            <div><strong>1</strong><span><b>Dip one strip</b><small>Remove it immediately, keep it level, and wait 15 seconds.</small></span></div>
+            <div><strong>2</strong><span><b>Photograph the pads</b><small>Automatic detection is editable, with manual back and undo.</small></span></div>
+            <div><strong>3</strong><span><b>Confirm, then treat</b><small>Compare uncertain pads to the bottle chart, then follow generic chemical advice.</small></span></div>
+          </div>
+          <div class="callout warn-callout"><strong>Experimental reader.</strong> This is not an official AquaChek product and is not a certified water-testing instrument. Confirm anything that looks off against the bottle chart.</div>
+          <button class="primary jumbo" id="finishOnboardingBtn">START READING STRIPS</button>
+        </div>
+      </section>
+
+      <section class="screen active" id="homeScreen">
+        <div class="card hero-card">
+          <div class="hero-row">
+            <div>
+              <div class="muted">Supported strip</div>
+              <h2>AquaChek Silver 7-in-1</h2>
+              <div class="muted" id="stripMeta">6 reagent pads · read at 15 seconds</div>
+            </div>
+          </div>
+          <div id="homeStatus" class="status-panel neutral">
+            <div class="status-title">No strip scanned yet</div>
+            <div class="status-copy">Photograph a fresh strip to see hardness, chlorine, pH, alkalinity, and CYA.</div>
+          </div>
+          <button class="primary jumbo" id="startTestBtn">SCAN A STRIP</button>
+        </div>
+
+        <div class="card">
+          <div class="card-heading-row">
+            <div>
+              <div class="section-label">Recent scans</div>
+              <h3>History</h3>
+            </div>
+            <button class="text-btn" id="openHistoryBtn">View all</button>
+          </div>
+          <div id="recentHistory" class="history-list compact"></div>
+        </div>
+      </section>
+
+      <section class="screen" id="testScreen">
+        <button class="back-btn" data-go="homeScreen">← Home</button>
+        <div class="card">
+          <div class="step-kicker">WATER TEST</div>
+          <h2>Use one fresh strip</h2>
+          <ol class="instructions">
+            <li>Dip the strip into the water and remove it immediately.</li>
+            <li>Do not shake off the excess water.</li>
+            <li>Hold the strip level.</li>
+            <li>For automatic scanning, photograph the strip roughly straight with the reagent tip toward the <strong>top or left</strong> of the photo.</li>
+            <li>Use the 15-second timer if you want help with timing, or skip it if the strip is already ready to read.</li>
+          </ol>
+          <button class="secondary jumbo" id="timerBtn">START OPTIONAL 15-SECOND TIMER</button>
+          <div id="countdown" class="countdown hidden" role="timer" aria-live="assertive">15</div>
+          <div id="photoPrompt">
+            <div class="callout success-callout" id="photoReadyCallout"><strong>Ready when you are.</strong> The timer is optional. If the strip is already at its read time, take or choose a photo now.</div>
+            <div class="photo-choice-grid">
+              <label class="primary jumbo file-label">
+                TAKE PHOTO
+                <input id="stripCameraInput" type="file" accept="image/*" capture="environment" />
+              </label>
+              <label class="secondary jumbo file-label">
+                CHOOSE FROM PHONE
+                <input id="stripGalleryInput" type="file" accept="image/*" />
+              </label>
+              <button class="secondary jumbo" id="openSavedPhotosBtn" type="button">CHOOSE SAVED PHOTO</button>
+              <button class="secondary jumbo" id="manualReadingsBtn" type="button">ENTER READINGS MANUALLY</button>
+            </div>
+            <div class="muted small photo-picker-note">Photos stay on this device. The reader does not upload strip pictures.</div>
+          </div>
+        </div>
+        <div class="card subtle">
+          <strong>Same scanner as Spa Coach.</strong> Pad detection, white balance, and color matching live in the shared strip-reading engine, so scanner improvements land here automatically.
+        </div>
+      </section>
+
+      <section class="screen" id="savedPhotosScreen">
+        <button class="back-btn" data-go="testScreen">← Test</button>
+        <div class="card">
+          <div class="step-kicker">SAVED PHOTOS</div>
+          <h2>Choose a saved strip photo</h2>
+          <p class="muted">Camera photos taken in this reader are saved here for reuse and rescan.</p>
+          <div id="savedPhotoLibrary" class="saved-photo-library"></div>
+        </div>
+      </section>
+
+      <section class="screen" id="scanScreen">
+        <button class="back-btn" data-go="testScreen">← Test</button>
+        <div class="card">
+          <div class="step-kicker">SCAN STRIP</div>
+          <h2 id="tapPrompt">Tap the center of pad 1</h2>
+          <p class="muted" id="tapHelp">Tap each reagent pad from the tip of the strip toward the handle. Avoid glare, droplets, and pad edges.</p>
+          <div id="autoDetectStatus" class="callout scan-detect-callout" role="status" aria-live="polite"><strong>Finding the strip…</strong></div>
+          <div class="canvas-wrap">
+            <canvas id="stripCanvas" role="img" aria-labelledby="tapPrompt" aria-describedby="tapHelp autoDetectStatus"></canvas>
+          </div>
+          <div class="tap-progress" id="tapProgress"></div>
+          <div id="autoDetectActions" class="auto-detect-actions hidden">
+            <button class="primary full" id="acceptAutoBtn">USE AUTO-DETECTED PADS</button>
+            <button class="secondary full" id="manualModeBtn">ADJUST MANUALLY</button>
+          </div>
+          <div class="button-row hidden" id="manualTapControls">
+            <button class="secondary" id="undoTapBtn" disabled>← Back one pad</button>
+            <button class="secondary" id="resetTapsBtn">Start over</button>
+          </div>
+          <button class="primary full hidden" id="analyzeManualBtn">ANALYZE THESE PADS</button>
+        </div>
+      </section>
+
+      <section class="screen" id="resultsScreen">
+        <button class="back-btn" data-go="homeScreen">← Home</button>
+        <div class="card">
+          <div class="step-kicker">RESULTS</div>
+          <div id="useStatus" class="use-status caution">Checking…</div>
+          <div id="resultRows" class="result-list"></div>
+          <div id="scanWarnings"></div>
+          <button class="primary jumbo" id="treatmentBtn">WHAT SHOULD I DO?</button>
+          <button class="secondary full" id="saveReadingBtn">SAVE THIS READING</button>
+          <button class="secondary full" id="editReadingsBtn">Review / correct readings</button>
+        </div>
+      </section>
+
+      <section class="screen" id="editScreen">
+        <button class="back-btn" data-go="resultsScreen">← Results</button>
+        <div class="card">
+          <div class="step-kicker">VERIFY</div>
+          <h2>Review the scanner</h2>
+          <p class="muted">Test strips are approximate. Change any value that does not match what you see on the bottle chart.</p>
+          <form id="readingForm" class="reading-form"></form>
+          <label class="check-field"><input id="calibrationOptIn" type="checkbox"> <span>Remember corrected pad colors for this phone and lighting</span></label>
+          <p class="muted small">Optional. Critical chlorine and pH readings still need a second look when confidence is low.</p>
+          <div id="reviewValidation" class="callout bad-callout hidden" role="alert"></div>
+          <button class="primary full" id="saveEditsBtn">USE THESE READINGS</button>
+        </div>
+      </section>
+
+      <section class="screen" id="treatmentScreen">
+        <button class="back-btn" data-go="resultsScreen">← Results</button>
+        <div class="card">
+          <div class="step-kicker">NEXT STEP</div>
+          <div id="treatmentContent"></div>
+          <button class="primary full" id="saveTreatmentBtn">SAVE THIS READING</button>
+          <button class="secondary full" id="skipTreatmentBtn">Save without treating</button>
+        </div>
+      </section>
+
+      <section class="screen" id="historyScreen">
+        <button class="back-btn" data-go="homeScreen">← Home</button>
+        <div class="card">
+          <div class="card-heading-row">
+            <div>
+              <div class="step-kicker">HISTORY</div>
+              <h2>Saved readings</h2>
+            </div>
+            <button class="text-btn danger-text" id="clearHistoryBtn">Clear</button>
+          </div>
+          <div class="callout local-photo-note"><strong>Photos stay on this device.</strong> Logged strip photos are stored in this browser’s local database.</div>
+          <div id="historyList" class="history-list"></div>
+        </div>
+      </section>
+
+      <section class="screen" id="photoScreen">
+        <button class="back-btn" data-go="historyScreen">← History</button>
+        <div class="card">
+          <div class="step-kicker">SAVED TEST PHOTO</div>
+          <h2 id="savedPhotoTitle">Test strip photo</h2>
+          <div class="saved-photo-wrap"><img id="savedPhotoImage" alt="Saved test strip photo"></div>
+          <div class="muted small" id="savedPhotoMeta"></div>
+          <button class="primary full" id="rescanSavedPhotoBtn">RESCAN THIS PHOTO</button>
+          <button class="secondary full danger-button" id="deleteSavedPhotoBtn">DELETE SAVED PHOTO</button>
+          <div class="muted small photo-delete-note">Deleting the photo does not delete the readings from history.</div>
+        </div>
+      </section>
+
+      <section class="screen" id="settingsScreen">
+        <button class="back-btn" data-go="homeScreen">← Home</button>
+        <div class="card">
+          <div class="step-kicker">SETTINGS</div>
+          <h2>Water volume</h2>
+          <p class="muted small">Used only to scale generic chemical amounts. The label of the product you buy still wins.</p>
+          <label class="field">Volume (gallons)<input id="waterVolumeInput" type="number" min="1" value="500" /></label>
+          <button class="primary full" id="saveVolumeBtn">SAVE VOLUME</button>
+        </div>
+        <div class="card">
+          <div class="section-label">About</div>
+          <h2>This reader</h2>
+          <p class="muted small" id="installHelp">Strip Reader uses Spa Coach’s strip-reading engine and gives brand-free chemical class advice. It does not track inventory or schedule spa maintenance.</p>
+          <h3 id="installedVersion">PHONE</h3>
+          <p class="muted small">AquaChek® is a trademark of its owner. This app is an independent reader for AquaChek Silver 7-in-1 pads and is not affiliated with or endorsed by Hach Company.</p>
+        </div>
+        <div class="card">
+          <div class="section-label">Scanner calibration</div>
+          <h3>Learned strip colors</h3>
+          <p class="muted small" id="calibrationSummary">No learned colors saved.</p>
+          <button class="secondary full danger-button" id="resetCalibrationsBtn" type="button">RESET LEARNED COLORS</button>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <template id="resultRowTemplate">
+    <div class="result-row">
+      <div class="result-pad-photo"></div>
+      <div>
+        <div class="result-name"></div>
+        <div class="result-confidence"></div>
+      </div>
+      <div class="result-value"></div>
+    </div>
+  </template>
+
+  <script src="../lib/version.js"></script>
+  <script src="../lib/photo-store.js"></script>
+  <script src="../lib/native-bridge.js"></script>
+  <script src="../lib/scanner.js"></script>
+  <script src="../lib/scan-session.js"></script>
+  <script src="../lib/chemistry.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>

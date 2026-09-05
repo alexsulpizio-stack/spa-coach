@@ -19,3 +19,9 @@ test('settings has no serious WCAG violations',async({page})=>{
   await page.getByRole('button',{name:'Open settings'}).click();
   await expectAccessible(page);
 });
+
+test('strip reader onboarding has no serious WCAG violations',async({page})=>{
+  await page.goto('/reader/');
+  await expect(page.getByRole('button',{name:'START READING STRIPS'})).toBeVisible();
+  await expectAccessible(page);
+});
