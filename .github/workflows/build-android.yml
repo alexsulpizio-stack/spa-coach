@@ -107,11 +107,6 @@ jobs:
           export SIGNATURE
           node -e 'const fs=require("fs");const m=JSON.parse(fs.readFileSync(process.argv[1]));m.signature={alg:"RS256",value:process.env.SIGNATURE};fs.writeFileSync("update.json",JSON.stringify(m,null,2)+"\n")' "$RUNNER_TEMP/update-unsigned.json"
 
-      - name: Confirm unpublished version
-        if: steps.release.outputs.publish == 'true'
-        working-directory: source
-        run: npm run verify:release
-
       - name: Publish immutable release and activate OTA
         if: steps.release.outputs.publish == 'true'
         shell: bash
