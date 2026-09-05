@@ -1,10 +1,14 @@
 package com.spacoach.app;
 
 import android.Manifest;
+import android.app.AlarmManager;
 import android.content.Context;
+import android.content.Intent;
 import android.content.SharedPreferences;
 import android.content.pm.PackageManager;
+import android.net.Uri;
 import android.os.Build;
+import android.provider.Settings;
 import android.webkit.JavascriptInterface;
 
 public class SpaBridge {
@@ -35,6 +39,21 @@ public class SpaBridge {
         activity.runOnUiThread(activity::requestNotificationPermissionIfNeeded);
     }
 
+    private void requestExactAlarmPermissionOnceIfNeeded() {
+        if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S) return;
+        AlarmManager am = (AlarmManager) activity.getSystemService(Context.ALARM_SERVICE);
+        if (am == null || am.canScheduleExactAlarms()) return;
+        if (prefs.getBoolean("exact_alarm_permission_asked", false)) return;
+        prefs.edit().putBoolean("exact_alarm_permission_asked", true).apply();
+        try {
+            Intent intent = new Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM);
+            intent.setData(Uri.parse("package:" + activity.getPackageName()));
+            activity.startActivity(intent);
+        } catch (Exception ignored) {
+            // ReminderScheduler already installed a safe allow-while-idle fallback.
+        }
+    }
+
     @JavascriptInterface
     public void scheduleReminder(String key, long atMillis, String title, String body) {
         activity.runOnUiThread(() -> {
@@ -43,6 +62,7 @@ public class SpaBridge {
                 activity.requestNotificationPermissionIfNeeded();
             }
             ReminderScheduler.schedule(activity, key, atMillis, title, body);
+            requestExactAlarmPermissionOnceIfNeeded();
         });
     }
 
