@@ -118,6 +118,7 @@ function applyMaintenanceDateInputs(prefix='', completeOnboarding=false) {
 }
 
 function installMaintenanceOnboarding() {
+  if (typeof document === 'undefined') return;
   const finish = document.getElementById('finishOnboardingBtn');
   if (finish && !document.getElementById('maintenanceOnboardingDates')) {
     const panel = document.createElement('div');
