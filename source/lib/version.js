@@ -1,6 +1,6 @@
 (() => {
-const APP_VERSION = '0.10.0';
-const VERSION_CODE = 103;
+const APP_VERSION = '0.10.1';
+const VERSION_CODE = 104;
 const CACHE_NAME = `spa-coach-phone-v${APP_VERSION}`;
 
 globalThis.SpaVersion = Object.freeze({ APP_VERSION, VERSION_CODE, CACHE_NAME });
