@@ -1,6 +1,8 @@
 (() => {
 const DAY_MS = 86400000;
 const STORAGE_KEY = 'spaCoachState';
+const WATER_TEST_REMINDER_KEY = 'water-test';
+const DEFAULT_WATER_TEST_REMINDER = Object.freeze({ enabled:true, days:7 });
 const MAINTENANCE_FIELDS = [
   { key:'lastDrainRefill', historyType:'drain-refill', input:'maintenanceLastFill', label:'When was the spa last drained and refilled?' },
   { key:'lastFilterRinse', historyType:'filter-rinse', input:'maintenanceLastRinse', label:'When was the filter last rinsed?' },
@@ -66,6 +68,35 @@ function latestHistoryAt(history, type) {
   return latest;
 }
 
+function waterTestReminderConfig(state = readSavedState()) {
+  return { ...DEFAULT_WATER_TEST_REMINDER, ...(state.waterTestReminder || {}) };
+}
+
+function syncWaterTestReminder(now = Date.now()) {
+  if (typeof window === 'undefined' || typeof globalThis.SpaNativeBridge === 'undefined') return;
+  const bridge = globalThis.SpaNativeBridge.createNativeBridge(window).get();
+  if (!bridge) return;
+  const state = readSavedState();
+  const config = waterTestReminderConfig(state);
+  try {
+    if (!config.enabled) {
+      bridge.cancelReminder(WATER_TEST_REMINDER_KEY);
+      return;
+    }
+    const lastTest = latestHistoryAt(state.history, 'water-test');
+    const dueAt = maintenanceDueAt(lastTest, config.days, now);
+    const scheduledAt = Math.max(now + 60000, dueAt);
+    bridge.scheduleReminder(
+      WATER_TEST_REMINDER_KEY,
+      scheduledAt,
+      'Time to test your spa water',
+      'Check chlorine, pH, alkalinity, and hardness. Test before each use even if the weekly reminder is not due yet.'
+    );
+  } catch (err) {
+    console.warn('Could not sync water test reminder', err);
+  }
+}
+
 function recoverMaintenanceDatesFromHistory() {
   const state = readSavedState();
   let changed = false;
@@ -117,6 +148,36 @@ function applyMaintenanceDateInputs(prefix='', completeOnboarding=false) {
   return writeSavedState(state);
 }
 
+function saveWaterTestReminderSettings() {
+  const enabled = document.getElementById('waterTestReminderEnabled');
+  const days = document.getElementById('waterTestReminderDays');
+  if (!enabled || !days) return false;
+  const state = readSavedState();
+  state.waterTestReminder = {
+    enabled: Boolean(enabled.checked),
+    days: Math.max(1, Math.min(30, Number(days.value) || DEFAULT_WATER_TEST_REMINDER.days))
+  };
+  if (!writeSavedState(state)) return false;
+  syncWaterTestReminder();
+  return true;
+}
+
+function installWaterTestReminderSettings() {
+  if (typeof document === 'undefined') return;
+  const settings = document.getElementById('settingsScreen');
+  if (!settings || document.getElementById('waterTestReminderCard')) return;
+  const state = readSavedState();
+  const config = waterTestReminderConfig(state);
+  const card = document.createElement('div');
+  card.className = 'card';
+  card.id = 'waterTestReminderCard';
+  card.innerHTML = `<div class="section-label">Water testing</div><h3>Test-water reminder</h3><p class="muted small">Intex recommends testing before each use and at least once a week. Spa Coach resets this reminder every time you log a water test.</p><label class="check-field"><input id="waterTestReminderEnabled" type="checkbox" ${config.enabled ? 'checked' : ''}> <span>Remind me to test the water</span></label><label class="field">Remind me after this many days without a test<input id="waterTestReminderDays" type="number" min="1" max="30" value="${Math.max(1, Number(config.days) || 7)}" /></label><button class="secondary full" id="saveWaterTestReminderBtn" type="button">SAVE WATER TEST REMINDER</button>`;
+  settings.appendChild(card);
+  document.getElementById('saveWaterTestReminderBtn').addEventListener('click', () => {
+    if (saveWaterTestReminderSettings()) location.reload();
+  });
+}
+
 function installMaintenanceOnboarding() {
   if (typeof document === 'undefined') return;
   const finish = document.getElementById('finishOnboardingBtn');
@@ -147,15 +208,30 @@ function installMaintenanceOnboarding() {
   }
 }
 
+function installWaterTestReminderSync() {
+  if (typeof document === 'undefined' || typeof window === 'undefined') return;
+  setTimeout(syncWaterTestReminder, 0);
+  document.addEventListener('click', event => {
+    if (!event.target?.closest?.('#logTreatmentBtn, #skipTreatmentBtn')) return;
+    setTimeout(syncWaterTestReminder, 2000);
+  });
+  window.addEventListener('pagehide', () => syncWaterTestReminder());
+  window.setInterval(syncWaterTestReminder, 30000);
+}
+
 // This file loads immediately before app.js. Repair legacy/mismatched state first so
 // app.js sees recovered maintenance dates when it creates reminders and renders status.
 recoverMaintenanceDatesFromHistory();
 installMaintenanceOnboarding();
+installWaterTestReminderSettings();
+installWaterTestReminderSync();
 
 globalThis.SpaReminders = Object.freeze({
   futureRelative,
   maintenanceDue,
   maintenanceDueAt,
-  recoverMaintenanceDatesFromHistory
+  recoverMaintenanceDatesFromHistory,
+  syncWaterTestReminder,
+  waterTestReminderConfig
 });
 })();
