@@ -2,7 +2,9 @@
 const DAY_MS = 86400000;
 const STORAGE_KEY = 'spaCoachState';
 const WATER_TEST_REMINDER_KEY = 'water-test';
+const FLOATER_REMINDER_KEY = 'chlorine-floater';
 const DEFAULT_WATER_TEST_REMINDER = Object.freeze({ enabled:true, days:7 });
+const DEFAULT_FLOATER_REMINDER = Object.freeze({ enabled:true, days:3 });
 const MAINTENANCE_FIELDS = [
   { key:'lastDrainRefill', historyType:'drain-refill', input:'maintenanceLastFill', label:'When was the spa last drained and refilled?' },
   { key:'lastFilterRinse', historyType:'filter-rinse', input:'maintenanceLastRinse', label:'When was the filter last rinsed?' },
@@ -72,6 +74,10 @@ function waterTestReminderConfig(state = readSavedState()) {
   return { ...DEFAULT_WATER_TEST_REMINDER, ...(state.waterTestReminder || {}) };
 }
 
+function floaterReminderConfig(state = readSavedState()) {
+  return { ...DEFAULT_FLOATER_REMINDER, ...(state.floaterReminder || {}) };
+}
+
 function syncWaterTestReminder(now = Date.now()) {
   if (typeof window === 'undefined' || typeof globalThis.SpaNativeBridge === 'undefined') return;
   const bridge = globalThis.SpaNativeBridge.createNativeBridge(window).get();
@@ -97,6 +103,31 @@ function syncWaterTestReminder(now = Date.now()) {
   }
 }
 
+function syncFloaterReminder(now = Date.now()) {
+  if (typeof window === 'undefined' || typeof globalThis.SpaNativeBridge === 'undefined') return;
+  const bridge = globalThis.SpaNativeBridge.createNativeBridge(window).get();
+  if (!bridge) return;
+  const state = readSavedState();
+  const config = floaterReminderConfig(state);
+  try {
+    if (!config.enabled) {
+      bridge.cancelReminder(FLOATER_REMINDER_KEY);
+      return;
+    }
+    const lastCheck = state.lastFloaterCheck || latestHistoryAt(state.history, 'floater-check');
+    const dueAt = maintenanceDueAt(lastCheck, config.days, now);
+    const scheduledAt = Math.max(now + 60000, dueAt);
+    bridge.scheduleReminder(
+      FLOATER_REMINDER_KEY,
+      scheduledAt,
+      'Check the chlorine floater',
+      'Make sure chlorine tablets remain, the floater is dispensing freely, and the setting has not moved.'
+    );
+  } catch (err) {
+    console.warn('Could not sync chlorine floater reminder', err);
+  }
+}
+
 function recoverMaintenanceDatesFromHistory() {
   const state = readSavedState();
   let changed = false;
@@ -105,6 +136,10 @@ function recoverMaintenanceDatesFromHistory() {
     const recovered = latestHistoryAt(state.history, field.historyType);
     if (recovered) { state[field.key] = recovered; changed = true; }
   });
+  if (!state.lastFloaterCheck) {
+    const recoveredFloater = latestHistoryAt(state.history, 'floater-check');
+    if (recoveredFloater) { state.lastFloaterCheck = recoveredFloater; changed = true; }
+  }
   if (changed) writeSavedState(state);
   return state;
 }
@@ -162,6 +197,32 @@ function saveWaterTestReminderSettings() {
   return true;
 }
 
+function saveFloaterReminderSettings() {
+  const enabled = document.getElementById('floaterReminderEnabled');
+  const days = document.getElementById('floaterReminderDays');
+  if (!enabled || !days) return false;
+  const state = readSavedState();
+  state.floaterReminder = {
+    enabled: Boolean(enabled.checked),
+    days: Math.max(1, Math.min(30, Number(days.value) || DEFAULT_FLOATER_REMINDER.days))
+  };
+  if (!writeSavedState(state)) return false;
+  syncFloaterReminder();
+  return true;
+}
+
+function logFloaterCheck() {
+  const state = readSavedState();
+  const at = new Date().toISOString();
+  state.lastFloaterCheck = at;
+  state.history = Array.isArray(state.history) ? state.history : [];
+  state.history.unshift({ id:`floater-${Date.now()}`, at, type:'floater-check' });
+  if (state.history.length > 200) state.history = state.history.slice(0, 200);
+  if (!writeSavedState(state)) return false;
+  syncFloaterReminder();
+  return true;
+}
+
 function installWaterTestReminderSettings() {
   if (typeof document === 'undefined') return;
   const settings = document.getElementById('settingsScreen');
@@ -176,6 +237,38 @@ function installWaterTestReminderSettings() {
   document.getElementById('saveWaterTestReminderBtn').addEventListener('click', () => {
     if (saveWaterTestReminderSettings()) location.reload();
   });
+}
+
+function installFloaterReminderUi() {
+  if (typeof document === 'undefined') return;
+  const state = readSavedState();
+  const config = floaterReminderConfig(state);
+  const settings = document.getElementById('settingsScreen');
+  if (settings && !document.getElementById('floaterReminderCard')) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = 'floaterReminderCard';
+    card.innerHTML = `<div class="section-label">Chlorine floater</div><h3>Floater check reminder</h3><p class="muted small">Check that tablets remain, the openings are clear, and the dispensing setting has not moved.</p><label class="check-field"><input id="floaterReminderEnabled" type="checkbox" ${config.enabled ? 'checked' : ''}> <span>Remind me to check the chlorine floater</span></label><label class="field">Remind me after this many days without a check<input id="floaterReminderDays" type="number" min="1" max="30" value="${Math.max(1, Number(config.days) || 3)}" /></label><button class="secondary full" id="saveFloaterReminderBtn" type="button">SAVE FLOATER REMINDER</button>`;
+    settings.appendChild(card);
+    document.getElementById('saveFloaterReminderBtn').addEventListener('click', () => {
+      if (saveFloaterReminderSettings()) location.reload();
+    });
+  }
+
+  const home = document.getElementById('homeScreen');
+  if (home && !document.getElementById('floaterCheckCard')) {
+    const card = document.createElement('div');
+    card.className = 'card';
+    card.id = 'floaterCheckCard';
+    const status = maintenanceDue(state.lastFloaterCheck || latestHistoryAt(state.history, 'floater-check'), config.days);
+    card.innerHTML = `<div class="card-heading-row"><div><div class="section-label">Sanitizer</div><h3>Chlorine floater</h3></div><button class="secondary small-btn" id="logFloaterCheckBtn" type="button">Log check</button></div><div class="muted small" id="floaterCheckStatus">${config.enabled ? status.label : 'Reminder disabled'}</div>`;
+    const dashboardCard = document.getElementById('maintenanceDashboard')?.closest('.card');
+    if (dashboardCard?.parentNode) dashboardCard.parentNode.insertBefore(card, dashboardCard);
+    else home.appendChild(card);
+    document.getElementById('logFloaterCheckBtn').addEventListener('click', () => {
+      if (logFloaterCheck()) location.reload();
+    });
+  }
 }
 
 function installMaintenanceOnboarding() {
@@ -208,23 +301,23 @@ function installMaintenanceOnboarding() {
   }
 }
 
-function installWaterTestReminderSync() {
+function installRecurringReminderSync() {
   if (typeof document === 'undefined' || typeof window === 'undefined') return;
-  setTimeout(syncWaterTestReminder, 0);
+  const syncAll = () => { syncWaterTestReminder(); syncFloaterReminder(); };
+  setTimeout(syncAll, 0);
   document.addEventListener('click', event => {
     if (!event.target?.closest?.('#logTreatmentBtn, #skipTreatmentBtn')) return;
     setTimeout(syncWaterTestReminder, 2000);
   });
-  window.addEventListener('pagehide', () => syncWaterTestReminder());
-  window.setInterval(syncWaterTestReminder, 30000);
+  window.addEventListener('pagehide', syncAll);
+  window.setInterval(syncAll, 30000);
 }
 
-// This file loads immediately before app.js. Repair legacy/mismatched state first so
-// app.js sees recovered maintenance dates when it creates reminders and renders status.
 recoverMaintenanceDatesFromHistory();
 installMaintenanceOnboarding();
 installWaterTestReminderSettings();
-installWaterTestReminderSync();
+installFloaterReminderUi();
+installRecurringReminderSync();
 
 globalThis.SpaReminders = Object.freeze({
   futureRelative,
@@ -232,6 +325,9 @@ globalThis.SpaReminders = Object.freeze({
   maintenanceDueAt,
   recoverMaintenanceDatesFromHistory,
   syncWaterTestReminder,
-  waterTestReminderConfig
+  waterTestReminderConfig,
+  syncFloaterReminder,
+  floaterReminderConfig,
+  logFloaterCheck
 });
 })();
