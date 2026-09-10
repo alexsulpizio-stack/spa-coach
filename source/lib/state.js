@@ -15,12 +15,14 @@ const DEFAULT_STATE = {
   ],
   maintenance: { filterEnabled:true, filterDays:7, drainEnabled:true, drainDays:90, replacementEnabled:true, replacementDays:30 },
   waterTestReminder: { enabled:true, days:7 },
+  floaterReminder: { enabled:true, days:3 },
   readings: null,
   scan: null,
   history: [],
   lastFilterRinse: null,
   lastDrainRefill: null,
   lastFilterReplacement: null,
+  lastFloaterCheck: null,
   pendingFollowUp: null,
   unresolvedIssues: [],
   scannerCalibrations: []
@@ -57,6 +59,7 @@ function migrateState(input) {
     profile: { ...DEFAULT_STATE.profile, ...(saved.profile || {}) },
     maintenance: { ...DEFAULT_STATE.maintenance, ...(saved.maintenance || {}) },
     waterTestReminder: { ...DEFAULT_STATE.waterTestReminder, ...(saved.waterTestReminder || {}) },
+    floaterReminder: { ...DEFAULT_STATE.floaterReminder, ...(saved.floaterReminder || {}) },
     inventory,
     history: Array.isArray(saved.history) ? saved.history.slice(-200) : [],
     scannerCalibrations: Array.isArray(saved.scannerCalibrations) ? saved.scannerCalibrations.slice(-72) : []
