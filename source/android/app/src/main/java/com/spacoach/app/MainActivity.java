@@ -80,7 +80,11 @@ public class MainActivity extends Activity {
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
                 fileCallback = callback;
-                openImageChooser(params != null && params.isCaptureEnabled());
+                if (requestsJsonDocument(params)) {
+                    openBackupDocumentChooser();
+                } else {
+                    openImageChooser(params != null && params.isCaptureEnabled());
+                }
                 return true;
             }
         });
@@ -312,6 +316,29 @@ public class MainActivity extends Activity {
         );
         channel.setDescription("Water-test and maintenance follow-up reminders from Spa Coach");
         nm.createNotificationChannel(channel);
+    }
+
+    private boolean requestsJsonDocument(WebChromeClient.FileChooserParams params) {
+        if (params == null) return false;
+        String[] acceptTypes = params.getAcceptTypes();
+        if (acceptTypes == null) return false;
+        for (String acceptType : acceptTypes) {
+            if (acceptType == null) continue;
+            String normalized = acceptType.trim().toLowerCase(Locale.ROOT);
+            if ("application/json".equals(normalized) || "text/json".equals(normalized) || ".json".equals(normalized)) {
+                return true;
+            }
+        }
+        return false;
+    }
+
+    private void openBackupDocumentChooser() {
+        cameraUri = null;
+        Intent document = new Intent(Intent.ACTION_OPEN_DOCUMENT);
+        document.addCategory(Intent.CATEGORY_OPENABLE);
+        document.setType("application/json");
+        document.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/json", "text/json", "text/plain"});
+        startActivityForResult(document, FILE_CHOOSER_REQUEST);
     }
 
     private void openImageChooser(boolean captureOnly) {
