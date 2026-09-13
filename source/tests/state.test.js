@@ -23,3 +23,23 @@ test('state migration caps learned colors and history',()=>{
   assert.equal(migrated.history.length,200);
   assert.equal(migrated.scannerCalibrations.length,72);
 });
+
+test('newer logged water tests clear stale follow-up reminders',()=>{
+  const migrated=migrateState({
+    history:[
+      {id:'old-test',type:'water-test',at:'2026-09-10T12:00:00.000Z'},
+      {id:'new-test',type:'water-test',at:'2026-09-13T12:00:00.000Z'}
+    ],
+    pendingFollowUp:{sourceTestId:'old-test',kind:'retest',dueAt:'2026-09-10T13:00:00.000Z',title:'Retest free chlorine'}
+  });
+  assert.equal(migrated.pendingFollowUp,null);
+});
+
+test('current follow-up remains attached to the latest logged test',()=>{
+  const followUp={sourceTestId:'new-test',kind:'retest',dueAt:'2026-09-13T13:00:00.000Z'};
+  const migrated=migrateState({
+    history:[{id:'new-test',type:'water-test',at:'2026-09-13T12:00:00.000Z'}],
+    pendingFollowUp:followUp
+  });
+  assert.deepEqual(migrated.pendingFollowUp,followUp);
+});

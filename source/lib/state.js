@@ -52,6 +52,18 @@ function migrateState(input) {
     if (sanitizerAt >= 0) inventory.splice(sanitizerAt + 1, 0, tabs);
     else inventory.push(tabs);
   }
+  const history = Array.isArray(saved.history) ? saved.history.slice(-200) : [];
+  const latestWaterTest = [...history].reverse().find(entry => entry?.type === 'water-test');
+  const pendingFollowUp = saved.pendingFollowUp && typeof saved.pendingFollowUp === 'object'
+    ? saved.pendingFollowUp
+    : null;
+  // A completed newer test supersedes any stale follow-up left by an older
+  // session or notification. This keeps the dashboard and native reminder in
+  // sync with the actual logged history.
+  const reconciledFollowUp = pendingFollowUp && latestWaterTest
+    && pendingFollowUp.sourceTestId !== latestWaterTest.id
+    ? null
+    : pendingFollowUp;
   return {
     ...clone(DEFAULT_STATE),
     ...saved,
@@ -61,7 +73,8 @@ function migrateState(input) {
     waterTestReminder: { ...DEFAULT_STATE.waterTestReminder, ...(saved.waterTestReminder || {}) },
     floaterReminder: { ...DEFAULT_STATE.floaterReminder, ...(saved.floaterReminder || {}) },
     inventory,
-    history: Array.isArray(saved.history) ? saved.history.slice(-200) : [],
+    history,
+    pendingFollowUp: reconciledFollowUp,
     scannerCalibrations: Array.isArray(saved.scannerCalibrations) ? saved.scannerCalibrations.slice(-72) : []
   };
 }
