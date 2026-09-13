@@ -90,6 +90,11 @@ public class SpaBridge {
     }
 
     @JavascriptInterface
+    public void requestCameraCapture() {
+        activity.runOnUiThread(activity::forceNextFileChooserToCamera);
+    }
+
+    @JavascriptInterface
     public void checkForUpdates() { activity.checkForUpdates(); }
 
     @JavascriptInterface
