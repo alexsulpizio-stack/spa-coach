@@ -124,10 +124,8 @@
           <div id="photoPrompt">
             <div class="callout success-callout" id="photoReadyCallout"><strong>Ready when you are.</strong> The timer is optional. If the strip is already at its read time, take or choose a photo now.</div>
             <div class="photo-choice-grid">
-              <label class="primary jumbo file-label">
-                TAKE PHOTO
-                <input id="stripCameraInput" type="file" accept="image/*" capture="environment" />
-              </label>
+              <button class="primary jumbo" id="takePhotoBtn" type="button">TAKE PHOTO</button>
+              <input id="stripCameraInput" class="hidden" type="file" accept="image/*" capture="environment" aria-hidden="true" tabindex="-1" />
               <label class="secondary jumbo file-label">
                 CHOOSE FROM PHONE
                 <input id="stripGalleryInput" type="file" accept="image/*" />

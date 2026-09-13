@@ -43,6 +43,7 @@ public class MainActivity extends Activity {
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
     private Uri cameraUri;
+    private boolean forceCameraNextChooser = false;
     private String pendingLaunchAction;
     private boolean pageReady = false;
     private String pendingBackupJson;
@@ -80,10 +81,10 @@ public class MainActivity extends Activity {
             public boolean onShowFileChooser(WebView webView, ValueCallback<Uri[]> callback, FileChooserParams params) {
                 if (fileCallback != null) fileCallback.onReceiveValue(null);
                 fileCallback = callback;
-                if (requestsJsonDocument(params)) {
-                    openBackupDocumentChooser();
-                } else if (requestsCameraCapture(params)) {
+                if (consumeForcedCameraChooser()) {
                     openImageChooser(true);
+                } else if (requestsJsonDocument(params)) {
+                    openBackupDocumentChooser();
                 } else {
                     openImageChooser(false);
                 }
@@ -320,18 +321,14 @@ public class MainActivity extends Activity {
         nm.createNotificationChannel(channel);
     }
 
-    private boolean requestsCameraCapture(WebChromeClient.FileChooserParams params) {
-        if (params == null) return false;
-        // Android WebView does not consistently expose the HTML capture attribute
-        // through isCaptureEnabled(). Spa Coach's only image input with capture
-        // intent is the camera input, so a single image accept type is treated as
-        // camera capture when WebView reports capture OR the chooser mode is not
-        // explicitly multi-select.
-        if (params.isCaptureEnabled()) return true;
-        String[] acceptTypes = params.getAcceptTypes();
-        if (acceptTypes == null || acceptTypes.length != 1) return false;
-        String accept = acceptTypes[0] == null ? "" : acceptTypes[0].trim().toLowerCase(Locale.ROOT);
-        return "image/*".equals(accept) && params.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN;
+    void forceNextFileChooserToCamera() {
+        forceCameraNextChooser = true;
+    }
+
+    private boolean consumeForcedCameraChooser() {
+        boolean forced = forceCameraNextChooser;
+        forceCameraNextChooser = false;
+        return forced;
     }
 
     private boolean requestsJsonDocument(WebChromeClient.FileChooserParams params) {

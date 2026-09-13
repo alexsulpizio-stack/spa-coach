@@ -249,6 +249,10 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     }
   }
 
+  $('takePhotoBtn').onclick = () => {
+    try { nativeBridge()?.requestCameraCapture?.(); } catch (_) {}
+    $('stripCameraInput').click();
+  };
   $('stripCameraInput').onchange = (e) => loadStripPhotoFromInput(e, 'camera');
   $('stripGalleryInput').onchange = (e) => loadStripPhotoFromInput(e, 'gallery');
 
