@@ -91,7 +91,10 @@ public class SpaBridge {
 
     @JavascriptInterface
     public void requestCameraCapture() {
-        activity.runOnUiThread(activity::forceNextFileChooserToCamera);
+        // This must be synchronous. The web page clicks the file input
+        // immediately after this bridge call returns, so posting to the UI
+        // thread can race the WebView file chooser.
+        activity.forceNextFileChooserToCamera();
     }
 
     @JavascriptInterface
