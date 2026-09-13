@@ -43,7 +43,7 @@ public class MainActivity extends Activity {
     private WebView webView;
     private ValueCallback<Uri[]> fileCallback;
     private Uri cameraUri;
-    private boolean forceCameraNextChooser = false;
+    private final AtomicBoolean forceCameraNextChooser = new AtomicBoolean(false);
     private String pendingLaunchAction;
     private boolean pageReady = false;
     private String pendingBackupJson;
@@ -322,13 +322,11 @@ public class MainActivity extends Activity {
     }
 
     void forceNextFileChooserToCamera() {
-        forceCameraNextChooser = true;
+        forceCameraNextChooser.set(true);
     }
 
     private boolean consumeForcedCameraChooser() {
-        boolean forced = forceCameraNextChooser;
-        forceCameraNextChooser = false;
-        return forced;
+        return forceCameraNextChooser.getAndSet(false);
     }
 
     private boolean requestsJsonDocument(WebChromeClient.FileChooserParams params) {
