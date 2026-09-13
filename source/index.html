@@ -162,6 +162,10 @@
           <div class="canvas-wrap">
             <canvas id="stripCanvas" role="img" aria-labelledby="tapPrompt" aria-describedby="tapHelp autoDetectStatus"></canvas>
           </div>
+          <div class="pad-zoom-panel" aria-live="polite">
+            <canvas id="padZoomCanvas" width="220" height="220" aria-label="Magnified pad area"></canvas>
+            <div><strong id="padZoomLabel">Magnified view</strong><span>Move over a pad to inspect its center before tapping.</span></div>
+          </div>
           <div class="tap-progress" id="tapProgress"></div>
           <div id="autoDetectActions" class="auto-detect-actions hidden">
             <button class="primary full" id="acceptAutoBtn">USE AUTO-DETECTED PADS</button>

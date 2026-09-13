@@ -277,6 +277,11 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
 
   const canvas = $('stripCanvas');
   const ctx = canvas.getContext('2d', { willReadFrequently: true });
+  const zoomCanvas = $('padZoomCanvas');
+  const zoomCtx = zoomCanvas.getContext('2d');
+  const zoomLabel = $('padZoomLabel');
+  const ZOOM_SIZE = 220;
+  const ZOOM_FACTOR = 3.5;
 
   function drawScanImage() {
     if (!sourceImage) return;
@@ -286,6 +291,26 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     canvas.height = Math.round(sourceImage.height * scale);
     ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
     taps.forEach((p, i) => drawTapMarker(p.x, p.y, i + 1));
+    if (taps.length) updateZoomPreview(taps[taps.length - 1], taps.length);
+  }
+
+  function updateZoomPreview(point, padNumber = taps.length + 1) {
+    if (!sourceImage || !point || !zoomCtx) return;
+    const sourcePoint = canvasToSourcePoint(point.x, point.y);
+    const cropWidth = Math.min(sourceImage.width, sourceImage.width / ZOOM_FACTOR);
+    const cropHeight = Math.min(sourceImage.height, sourceImage.height / ZOOM_FACTOR);
+    const sx = Math.max(0, Math.min(sourceImage.width - cropWidth, sourcePoint.x - cropWidth / 2));
+    const sy = Math.max(0, Math.min(sourceImage.height - cropHeight, sourcePoint.y - cropHeight / 2));
+    zoomCtx.clearRect(0, 0, ZOOM_SIZE, ZOOM_SIZE);
+    zoomCtx.imageSmoothingEnabled = true;
+    zoomCtx.drawImage(sourceImage, sx, sy, cropWidth, cropHeight, 0, 0, ZOOM_SIZE, ZOOM_SIZE);
+    zoomCtx.strokeStyle = '#e4572e';
+    zoomCtx.lineWidth = 3;
+    zoomCtx.beginPath();
+    zoomCtx.moveTo(ZOOM_SIZE / 2 - 12, ZOOM_SIZE / 2); zoomCtx.lineTo(ZOOM_SIZE / 2 + 12, ZOOM_SIZE / 2);
+    zoomCtx.moveTo(ZOOM_SIZE / 2, ZOOM_SIZE / 2 - 12); zoomCtx.lineTo(ZOOM_SIZE / 2, ZOOM_SIZE / 2 + 12);
+    zoomCtx.stroke();
+    if (zoomLabel) zoomLabel.textContent = padNumber > PAD_ORDER.length ? 'Magnified view' : `Pad ${padNumber} magnified`;
   }
 
   function drawTapMarker(x, y, n) {
@@ -375,6 +400,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     e.preventDefault();
     if (!sourceImage || autoDetectionActive || taps.length >= PAD_ORDER.length) return;
     const p = canvasPoint(e);
+    updateZoomPreview(p, taps.length + 1);
     taps.push(p);
     sampled.push(samplePatch(p.x, p.y));
     drawScanImage();
@@ -385,6 +411,10 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   }
   canvas.addEventListener('click', onCanvasTap);
   canvas.addEventListener('touchend', onCanvasTap, { passive: false });
+  canvas.addEventListener('pointermove', e => {
+    if (!sourceImage) return;
+    updateZoomPreview(canvasPoint(e), taps.length + 1);
+  });
 
   function samplePatch(x, y) {
     const pixels = getSourcePixels();

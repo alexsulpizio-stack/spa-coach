@@ -15,6 +15,8 @@ test('synthetic strip photo auto-detects pads and reads chart colors', async ({ 
     mimeType: 'image/png',
     buffer: encodeStripPng()
   });
+  await expect(page.locator('#padZoomCanvas')).toBeVisible();
+  await expect(page.locator('#padZoomLabel')).toContainText('Pad 6 magnified');
   await expect(page.getByRole('button', { name: 'USE AUTO-DETECTED PADS' })).toBeVisible({ timeout: 10000 });
   await page.getByRole('button', { name: 'USE AUTO-DETECTED PADS' }).click();
   await expect(page.locator('#resultRows')).toContainText('Total Hardness');
