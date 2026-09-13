@@ -82,8 +82,10 @@ public class MainActivity extends Activity {
                 fileCallback = callback;
                 if (requestsJsonDocument(params)) {
                     openBackupDocumentChooser();
+                } else if (requestsCameraCapture(params)) {
+                    openImageChooser(true);
                 } else {
-                    openImageChooser(params != null && params.isCaptureEnabled());
+                    openImageChooser(false);
                 }
                 return true;
             }
@@ -316,6 +318,20 @@ public class MainActivity extends Activity {
         );
         channel.setDescription("Water-test and maintenance follow-up reminders from Spa Coach");
         nm.createNotificationChannel(channel);
+    }
+
+    private boolean requestsCameraCapture(WebChromeClient.FileChooserParams params) {
+        if (params == null) return false;
+        // Android WebView does not consistently expose the HTML capture attribute
+        // through isCaptureEnabled(). Spa Coach's only image input with capture
+        // intent is the camera input, so a single image accept type is treated as
+        // camera capture when WebView reports capture OR the chooser mode is not
+        // explicitly multi-select.
+        if (params.isCaptureEnabled()) return true;
+        String[] acceptTypes = params.getAcceptTypes();
+        if (acceptTypes == null || acceptTypes.length != 1) return false;
+        String accept = acceptTypes[0] == null ? "" : acceptTypes[0].trim().toLowerCase(Locale.ROOT);
+        return "image/*".equals(accept) && params.getMode() == WebChromeClient.FileChooserParams.MODE_OPEN;
     }
 
     private boolean requestsJsonDocument(WebChromeClient.FileChooserParams params) {
