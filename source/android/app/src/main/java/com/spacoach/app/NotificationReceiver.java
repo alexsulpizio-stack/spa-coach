@@ -19,10 +19,12 @@ public class NotificationReceiver extends BroadcastReceiver {
         SharedPreferences p = context.getSharedPreferences(ReminderScheduler.PREFS, Context.MODE_PRIVATE);
         String key = intent.getStringExtra("reminder_key");
         if (key == null) key = "retest";
+        // Existing alarms from older builds have no due-time extra.
+        long dueAt = intent.getLongExtra("reminder_due_at", p.getLong(key + "_at", 0L));
+        if (!ReminderScheduler.claimDelivery(context, key, dueAt)) return;
         String title = p.getString(key + "_title", "Spa Coach reminder");
         String body = p.getString(key + "_body", "Open Spa Coach for your next step.");
         post(context, title, body, ReminderScheduler.idFor(key), true);
-        p.edit().putBoolean(key + "_active", false).apply();
     }
 
     public static void post(Context context, String title, String body, int notificationId, boolean finishRetest) {

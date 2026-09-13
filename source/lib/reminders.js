@@ -16,6 +16,19 @@ function maintenanceDueAt(lastDone, days, now = Date.now()) {
   return base + Math.max(1, Number(days) || 1) * DAY_MS;
 }
 
+// Keep the initial clock across syncs/restarts without modifying the app's
+// in-memory state. Once an action is logged its completion time takes over.
+function reminderDueAt(key, lastDone, days, now = Date.now()) {
+  if (lastDone) return maintenanceDueAt(lastDone, days, now);
+  const storageKey = `spaCoachReminderStart:${key}`;
+  let start = Number(localStorage.getItem(storageKey));
+  if (!Number.isFinite(start) || start <= 0) {
+    start = now;
+    localStorage.setItem(storageKey, String(start));
+  }
+  return start + Math.max(1, Number(days) || 1) * DAY_MS;
+}
+
 function maintenanceDue(lastDone, days, now = Date.now()) {
   if (!lastDone) return { label: 'Not started', level: 'neutral' };
   const daysLeft = Math.ceil((maintenanceDueAt(lastDone, days, now) - now) / DAY_MS);
@@ -90,11 +103,10 @@ function syncWaterTestReminder(now = Date.now()) {
       return;
     }
     const lastTest = latestHistoryAt(state.history, 'water-test');
-    const dueAt = maintenanceDueAt(lastTest, config.days, now);
-    const scheduledAt = Math.max(now + 60000, dueAt);
+    const dueAt = reminderDueAt(WATER_TEST_REMINDER_KEY, lastTest, config.days, now);
     bridge.scheduleReminder(
       WATER_TEST_REMINDER_KEY,
-      scheduledAt,
+      dueAt,
       'Time to test your spa water',
       'Check chlorine, pH, alkalinity, and hardness. Test before each use even if the weekly reminder is not due yet.'
     );
@@ -115,11 +127,10 @@ function syncFloaterReminder(now = Date.now()) {
       return;
     }
     const lastCheck = state.lastFloaterCheck || latestHistoryAt(state.history, 'floater-check');
-    const dueAt = maintenanceDueAt(lastCheck, config.days, now);
-    const scheduledAt = Math.max(now + 60000, dueAt);
+    const dueAt = reminderDueAt(FLOATER_REMINDER_KEY, lastCheck, config.days, now);
     bridge.scheduleReminder(
       FLOATER_REMINDER_KEY,
-      scheduledAt,
+      dueAt,
       'Check the chlorine floater',
       'Make sure chlorine tablets remain, the floater is dispensing freely, and the setting has not moved.'
     );
@@ -301,28 +312,16 @@ function installMaintenanceOnboarding() {
   }
 }
 
-function installRecurringReminderSync() {
-  if (typeof document === 'undefined' || typeof window === 'undefined') return;
-  const syncAll = () => { syncWaterTestReminder(); syncFloaterReminder(); };
-  setTimeout(syncAll, 0);
-  document.addEventListener('click', event => {
-    if (!event.target?.closest?.('#logTreatmentBtn, #skipTreatmentBtn')) return;
-    setTimeout(syncWaterTestReminder, 2000);
-  });
-  window.addEventListener('pagehide', syncAll);
-  window.setInterval(syncAll, 30000);
-}
-
 recoverMaintenanceDatesFromHistory();
 installMaintenanceOnboarding();
 installWaterTestReminderSettings();
 installFloaterReminderUi();
-installRecurringReminderSync();
 
 globalThis.SpaReminders = Object.freeze({
   futureRelative,
   maintenanceDue,
   maintenanceDueAt,
+  reminderDueAt,
   recoverMaintenanceDatesFromHistory,
   syncWaterTestReminder,
   waterTestReminderConfig,

@@ -67,6 +67,8 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   function syncNativeReminder() {
     const bridge = nativeBridge();
     if (!bridge) return;
+    globalThis.SpaReminders.syncWaterTestReminder();
+    globalThis.SpaReminders.syncFloaterReminder();
     const follow = state.pendingFollowUp;
     try {
       if (follow?.kind === 'retest' && follow?.dueAt) {
@@ -90,7 +92,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   }
   function syncMaintenanceReminder(bridge, key, enabled, lastDone, days, title, body) {
     if (!enabled) { bridge.cancelReminder(key); return; }
-    bridge.scheduleReminder(key, maintenanceDueAt(lastDone, days), title, body);
+    bridge.scheduleReminder(key, globalThis.SpaReminders.reminderDueAt(key, lastDone, days), title, body);
   }
   function renderNotificationSettings() {
     const status = $('notificationStatus'), help = $('notificationHelp'), enable = $('enableNotificationsBtn'), test = $('testNotificationBtn');
