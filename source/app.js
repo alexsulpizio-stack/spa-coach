@@ -276,7 +276,179 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   }
 
   const canvas = $('stripCanvas');
-  const ct…7474 tokens truncated…` : '';
+  const ctx = canvas.getContext('2d', { willReadFrequently: true });
+
+  function drawScanImage() {
+    if (!sourceImage) return;
+    const maxW = 1200;
+    const scale = Math.min(1, maxW / sourceImage.width);
+    canvas.width = Math.round(sourceImage.width * scale);
+    canvas.height = Math.round(sourceImage.height * scale);
+    ctx.drawImage(sourceImage, 0, 0, canvas.width, canvas.height);
+    taps.forEach((p, i) => drawTapMarker(p.x, p.y, i + 1));
+  }
+
+  function drawTapMarker(x, y, n) {
+    ctx.save();
+    ctx.beginPath();
+    ctx.arc(x, y, 18, 0, Math.PI * 2);
+    ctx.fillStyle = 'rgba(11,101,116,.78)';
+    ctx.fill();
+    ctx.strokeStyle = '#fff'; ctx.lineWidth = 3; ctx.stroke();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 16px system-ui'; ctx.textAlign = 'center'; ctx.textBaseline = 'middle';
+    ctx.fillText(String(n), x, y + 1);
+    ctx.restore();
+  }
+
+  function getSourcePixels() {
+    if (sourcePixels || !sourceImage) return sourcePixels;
+    sourcePixels = pixelsFromBitmap(sourceImage);
+    return sourcePixels;
+  }
+
+  function canvasToSourcePoint(x, y) {
+    if (!sourceImage || !canvas.width || !canvas.height) return { x, y };
+    return { x: x * sourceImage.width / canvas.width, y: y * sourceImage.height / canvas.height };
+  }
+
+  function autoDetectPads() {
+    if (!sourceImage || !canvas.width || !canvas.height) return null;
+    const result = detectPadsFromBitmap(sourceImage);
+    if (!result) return null;
+    result.points = scalePoints(result.points, sourceImage.width, sourceImage.height, canvas.width, canvas.height);
+    return result;
+  }
+
+  function runAutoDetection() {
+    let result;
+    try {
+      result=autoDetectPads();
+    } catch (error) {
+      console.warn('Automatic pad detection failed',error);
+      enterManualMode('Automatic detection stopped safely. Tap the six pads manually from the tip toward the handle.');
+      return;
+    }
+    if (!result || result.confidence==='low') {
+      enterManualMode('Automatic detection could not confidently find six pads. Tap them manually from the tip toward the handle.');
+      return;
+    }
+    autoDetectionActive=true;
+    autoDetectionInfo=result;
+    taps=result.points;
+    sampled=taps.map(p=>samplePatch(p.x,p.y));
+    drawScanImage();
+    renderTapProgress();
+    $('autoDetectStatus').className='callout success-callout scan-detect-callout';
+    $('autoDetectStatus').innerHTML=`<strong>6 pads found automatically.</strong><br>${result.orientation==='vertical'?'Vertical':'Horizontal'} strip · ${result.confidence} geometry confidence. Check that markers 1–6 sit near the center of each colored pad.`;
+    $('autoDetectActions').classList.remove('hidden');
+    $('manualTapControls').classList.add('hidden');
+    $('analyzeManualBtn').classList.add('hidden');
+  }
+
+  function enterManualMode(message='Tap each reagent pad manually.') {
+    autoDetectionActive=false;
+    autoDetectionInfo=null;
+    taps=[]; sampled=[];
+    drawScanImage();
+    $('autoDetectStatus').className='callout warn-callout scan-detect-callout';
+    $('autoDetectStatus').innerHTML=`<strong>Manual placement</strong><br>${message}`;
+    $('autoDetectActions').classList.add('hidden');
+    $('manualTapControls').classList.remove('hidden');
+    $('analyzeManualBtn').classList.add('hidden');
+    renderTapProgress();
+  }
+
+  $('acceptAutoBtn').onclick=()=>{
+    if (taps.length===PAD_ORDER.length) analyzeTaps();
+  };
+  $('manualModeBtn').onclick=()=>enterManualMode('Tap each pad from the reagent tip toward the handle.');
+
+  function canvasPoint(e) {
+    const rect = canvas.getBoundingClientRect();
+    const touch = e.touches?.[0] || e.changedTouches?.[0];
+    const clientX = touch ? touch.clientX : e.clientX;
+    const clientY = touch ? touch.clientY : e.clientY;
+    return { x: (clientX - rect.left) * (canvas.width / rect.width), y: (clientY - rect.top) * (canvas.height / rect.height) };
+  }
+
+  function onCanvasTap(e) {
+    e.preventDefault();
+    if (!sourceImage || autoDetectionActive || taps.length >= PAD_ORDER.length) return;
+    const p = canvasPoint(e);
+    taps.push(p);
+    sampled.push(samplePatch(p.x, p.y));
+    drawScanImage();
+    renderTapProgress();
+    // Manual placement no longer auto-analyzes after pad 6. Give the user a
+    // chance to back up one or more pads, inspect every marker, and explicitly
+    // confirm the placement before chemistry analysis starts.
+  }
+  canvas.addEventListener('click', onCanvasTap);
+  canvas.addEventListener('touchend', onCanvasTap, { passive: false });
+
+  function samplePatch(x, y) {
+    const pixels = getSourcePixels();
+    if (!pixels) return { ...EMPTY_PAD_SAMPLE };
+    return samplePadsAtSourcePoints(pixels, [canvasToSourcePoint(x, y)])[0];
+  }
+
+  function makePadCrop(x, y) {
+    return cropPadFromBitmap(sourceImage, x, y, canvas.width, canvas.height);
+  }
+
+  function renderTapProgress() {
+    $('tapProgress').innerHTML = PAD_ORDER.map((p,i)=>`<span class="tap-dot ${i < taps.length ? 'done':''}">${i+1}. ${p.name}</span>`).join('');
+    if (autoDetectionActive && taps.length === PAD_ORDER.length) {
+      $('tapPrompt').textContent = 'Six pads found automatically';
+      $('tapHelp').textCo…5496 tokens truncated…saveState();
+    syncNativeReminder();
+    return photoSaved;
+  }
+
+  $('logFilterBtn').onclick = () => {
+    const now = new Date().toISOString();
+    state.lastFilterRinse = now;
+    state.history.unshift({ id: String(Date.now()), at: now, type:'filter-rinse' });
+    saveState(); syncNativeReminder(); renderHome();
+  };
+
+  $('logDrainBtn').onclick = () => {
+    const now = new Date().toISOString();
+    state.lastDrainRefill = now;
+    state.history.unshift({ id: String(Date.now()), at: now, type:'drain-refill' });
+    saveState(); syncNativeReminder(); renderHome();
+  };
+
+  $('logReplacementBtn').onclick = () => {
+    const now=new Date().toISOString(); state.lastFilterReplacement=now;
+    state.history.unshift({id:String(Date.now()),at:now,type:'filter-replacement'});
+    saveState(); syncNativeReminder(); renderHome(); renderSettings();
+  };
+
+  function renderHome() {
+    const profile=state.profile;
+    document.querySelector('#homeScreen .hero-card h2').textContent = profile.name || 'My PureSpa';
+    document.querySelector('#homeScreen .hero-card .hero-row .muted:last-child').textContent = `6-person · ${profile.volume} gal · Chlorine`;
+    document.querySelector('.spa-badge').innerHTML = `${profile.volume}<br><span>GAL</span>`;
+    const panel=$('homeStatus');
+    if (state.readings) {
+      const safety=evaluateSafety(state.readings, state.scan?.details || {});
+      panel.className=`status-panel ${safety.level}`;
+      const fcText = state.readings.freeChlorine == null ? 'uncertain' : `${state.readings.freeChlorine} ppm`;
+      const phText = state.readings.ph == null ? 'uncertain' : state.readings.ph;
+      const lastLogged = state.history.find(h=>h.type==='water-test')?.at;
+      panel.innerHTML=`<div class="status-title">${escapeHtml(safety.title)}</div><div class="status-copy">${safety.reason ? `${escapeHtml(safety.reason)}<br>` : ''}Last tested ${relativeTime(lastLogged || state.scan?.at)} · Free chlorine ${fcText} · pH ${phText}</div>`;
+    } else {
+      panel.className='status-panel neutral';
+      panel.innerHTML='<div class="status-title">Needs a water test</div><div class="status-copy">Scan a fresh AquaChek strip before using the spa.</div>';
+    }
+
+    const followPanel = $('followUpPanel');
+    const follow = state.pendingFollowUp;
+    if (follow) {
+      followPanel.classList.remove('hidden');
+      const timing = follow.dueAt ? futureRelative(follow.dueAt) : (follow.kind === 'action' ? 'Treatment still pending' : 'No timer set');
+      const exactDue = follow.dueAt ? `Due ${formatDateTime(follow.dueAt)}` : '';
       const issueSource = (follow.unresolvedIssues?.length ? follow.unresolvedIssues : state.unresolvedIssues) || [];
       const issueTags = issueSource.length ? `<div class="issue-tags">${issueSource.map(i=>`<span>${escapeHtml(i.label)}</span>`).join('')}</div>` : '';
       const continueButton = follow.kind === 'action' ? '<button class="secondary full followup-action" id="continuePlanBtn">VIEW NEXT STEP</button>' : '';
