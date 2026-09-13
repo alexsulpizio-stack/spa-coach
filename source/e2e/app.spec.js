@@ -62,6 +62,33 @@ test('maintenance settings schedule native reminders',async({page})=>{
   expect(keys).toContain('filter');
 });
 
+test('idle app does not reschedule and water-test logging syncs immediately',async({page})=>{
+  await page.clock.install();
+  await page.addInitScript(()=>{
+    window.__scheduled=[];
+    window.SpaNative={isNativeApp:()=>true,getNotificationPermission:()=> 'granted',getAppVersion:()=> '0.10.7',
+      scheduleReminder:(...args)=>window.__scheduled.push(args),cancelReminder:()=>{}};
+  });
+  await finishOnboarding(page);
+  const initial=await page.evaluate(()=>window.__scheduled.length);
+  expect(initial).toBe(5);
+  await page.clock.fastForward(125000);
+  expect(await page.evaluate(()=>window.__scheduled.length)).toBe(initial);
+  await page.getByRole('button',{name:'TEST MY WATER'}).click();
+  await page.getByRole('button',{name:'ENTER READINGS MANUALLY'}).click();
+  await page.locator('#edit_freeChlorine').selectOption('1');
+  await page.locator('#edit_ph').selectOption('7.2');
+  await page.getByRole('button',{name:'USE THESE READINGS'}).click();
+  await page.getByRole('button',{name:'WHAT SHOULD I DO?'}).click();
+  await page.locator('#skipTreatmentBtn').click();
+  await expect.poll(()=>page.evaluate(()=>window.__scheduled.filter(x=>x[0]==='water-test').length)).toBe(2);
+  const result=await page.evaluate(()=>({
+    due:window.__scheduled.filter(x=>x[0]==='water-test').at(-1)[1],
+    at:JSON.parse(localStorage.getItem('spaCoachState')).history.find(x=>x.type==='water-test').at
+  }));
+  expect(result.due).toBe(Date.parse(result.at)+7*86400000);
+});
+
 test('full backup restore migrates state and reloads safely',async({page})=>{
   await finishOnboarding(page);
   await page.getByRole('button',{name:'Open settings'}).click();

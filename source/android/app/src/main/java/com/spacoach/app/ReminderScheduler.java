@@ -9,13 +9,15 @@ import android.os.Build;
 
 public final class ReminderScheduler {
     static final String PREFS = "spa_reminders";
-    static final String[] KEYS = {"retest", "filter", "drain", "replacement"};
+    static final String[] KEYS = {"retest", "filter", "drain", "replacement", "water-test", "chlorine-floater"};
     static final String MODE_EXACT = "exact";
     static final String MODE_FALLBACK = "allow-while-idle";
 
     private ReminderScheduler() {}
 
     static int idFor(String key) {
+        if ("water-test".equals(key)) return 4006;
+        if ("chlorine-floater".equals(key)) return 4007;
         return "filter".equals(key) ? 4003 : "drain".equals(key) ? 4004 : "replacement".equals(key) ? 4005 : 4001;
     }
 
@@ -25,16 +27,27 @@ public final class ReminderScheduler {
         return am != null && am.canScheduleExactAlarms();
     }
 
-    public static void schedule(Context context, String key, long atMillis, String title, String body) {
+    public static synchronized void schedule(Context context, String key, long atMillis, String title, String body) {
+        schedule(context, key, atMillis, title, body, false);
+    }
+
+    private static void schedule(Context context, String key, long atMillis, String title, String body, boolean force) {
         SharedPreferences prefs = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (atMillis <= 0) return;
+        if (prefs.getLong(key + "_delivered_at", Long.MIN_VALUE) == atMillis) return;
+        AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+        if (am == null) return;
+        boolean unchanged = prefs.getBoolean(key + "_active", false)
+            && prefs.getLong(key + "_at", 0L) == atMillis;
+        // Content may change without changing the reminder's identity.
+        prefs.edit().putString(key + "_title", title).putString(key + "_body", body).apply();
+        if (unchanged && !force) return;
         prefs.edit().putBoolean(key + "_active", true)
             .putLong(key + "_at", atMillis)
             .putString(key + "_title", title)
             .putString(key + "_body", body)
             .apply();
 
-        AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
-        if (am == null) return;
         PendingIntent pi = alarmIntent(context, key);
         am.cancel(pi);
         long when = Math.max(System.currentTimeMillis() + 1500L, atMillis);
@@ -53,7 +66,7 @@ public final class ReminderScheduler {
         prefs.edit().putString(key + "_mode", mode).apply();
     }
 
-    public static void cancel(Context context, String key) {
+    public static synchronized void cancel(Context context, String key) {
         AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
         if (am != null) am.cancel(alarmIntent(context, key));
         context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).edit()
@@ -61,25 +74,44 @@ public final class ReminderScheduler {
             .apply();
     }
 
-    public static void rescheduleAfterBoot(Context context) {
+    public static synchronized void rescheduleAfterBoot(Context context) {
         SharedPreferences p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
         for (String key : KEYS) {
             if (p.getBoolean(key + "_active", false)) {
                 schedule(
                     context,
                     key,
-                    Math.max(p.getLong(key + "_at", 0L), System.currentTimeMillis() + 3000L),
+                    p.getLong(key + "_at", 0L),
                     p.getString(key + "_title", "Spa Coach reminder"),
-                    p.getString(key + "_body", "Open Spa Coach for your next step.")
+                    p.getString(key + "_body", "Open Spa Coach for your next step."),
+                    true
                 );
             }
         }
+    }
+
+    // Persist before posting: duplicate broadcasts, app syncs, and reboot cannot
+    // alert again for this occurrence. A new completion/due time re-arms it.
+    static synchronized boolean claimDelivery(Context context, String key, long dueAt) {
+        SharedPreferences p = context.getSharedPreferences(PREFS, Context.MODE_PRIVATE);
+        if (!p.getBoolean(key + "_active", false)
+                || p.getLong(key + "_at", 0L) != dueAt
+                || dueAt > System.currentTimeMillis()
+                || p.getLong(key + "_delivered_at", Long.MIN_VALUE) == dueAt) return false;
+        boolean saved = p.edit().putLong(key + "_delivered_at", dueAt)
+            .putBoolean(key + "_active", false).commit();
+        if (saved) {
+            AlarmManager am = (AlarmManager) context.getSystemService(Context.ALARM_SERVICE);
+            if (am != null) am.cancel(alarmIntent(context, key));
+        }
+        return saved;
     }
 
     static PendingIntent alarmIntent(Context context, String key) {
         Intent i = new Intent(context, NotificationReceiver.class);
         i.setAction("com.spacoach.app.REMINDER_" + key);
         i.putExtra("reminder_key", key);
+        i.putExtra("reminder_due_at", context.getSharedPreferences(PREFS, Context.MODE_PRIVATE).getLong(key + "_at", 0L));
         return PendingIntent.getBroadcast(
             context,
             idFor(key),
