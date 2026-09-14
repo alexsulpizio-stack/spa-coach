@@ -4,6 +4,8 @@ const STATE_SCHEMA_VERSION = 1;
 const DEFAULT_STATE = {
   stateSchemaVersion: STATE_SCHEMA_VERSION,
   profile: { name: 'My PureSpa', volume: 290, sanitizer: 'chlorine', bodyOfWater: 'spa', sanitizerSystem: 'chlorine', saltTarget: 3200, pumpHours: 8 },
+  profiles: [{ id: 'spa-default', name: 'My PureSpa', volume: 290, sanitizer: 'chlorine', bodyOfWater: 'spa', sanitizerSystem: 'chlorine', saltTarget: 3200, pumpHours: 8 }],
+  activeProfileId: 'spa-default',
   onboardingComplete: false,
   inventory: [
     { id:'sanitizer', name:'Leisure Time Spa 56', purpose:'Sanitizer / shock', quantity:1, unit:'container', lowAt:0.25, dosePer500:0.5 },
@@ -64,18 +66,26 @@ function migrateState(input) {
     && pendingFollowUp.sourceTestId !== latestWaterTest.id
     ? null
     : pendingFollowUp;
+  const baseProfile = { ...DEFAULT_STATE.profile, ...(saved.profile || {}) };
+  const rawProfiles = Array.isArray(saved.profiles) && saved.profiles.length ? saved.profiles : [{ id: 'spa-default', ...baseProfile }];
+  const profiles = rawProfiles.map((profile, index) => ({
+    ...DEFAULT_STATE.profile,
+    ...profile,
+    id: String(profile?.id || `profile-${index + 1}`),
+    bodyOfWater: profile?.bodyOfWater === 'pool' ? 'pool' : 'spa',
+    sanitizerSystem: profile?.sanitizerSystem === 'salt' ? 'salt' : 'chlorine',
+    saltTarget: Math.max(0, Number(profile?.saltTarget ?? DEFAULT_STATE.profile.saltTarget) || DEFAULT_STATE.profile.saltTarget),
+    pumpHours: Math.min(24, Math.max(1, Number(profile?.pumpHours ?? DEFAULT_STATE.profile.pumpHours) || DEFAULT_STATE.profile.pumpHours))
+  }));
+  const activeProfileId = profiles.some(profile => profile.id === saved.activeProfileId) ? saved.activeProfileId : profiles[0].id;
+  const activeProfile = profiles.find(profile => profile.id === activeProfileId) || profiles[0];
   return {
     ...clone(DEFAULT_STATE),
     ...saved,
     stateSchemaVersion: STATE_SCHEMA_VERSION,
-    profile: {
-      ...DEFAULT_STATE.profile,
-      ...(saved.profile || {}),
-      bodyOfWater: saved.profile?.bodyOfWater === 'pool' ? 'pool' : 'spa',
-      sanitizerSystem: saved.profile?.sanitizerSystem === 'salt' ? 'salt' : 'chlorine',
-      saltTarget: Math.max(0, Number(saved.profile?.saltTarget ?? DEFAULT_STATE.profile.saltTarget) || DEFAULT_STATE.profile.saltTarget),
-      pumpHours: Math.min(24, Math.max(1, Number(saved.profile?.pumpHours ?? DEFAULT_STATE.profile.pumpHours) || DEFAULT_STATE.profile.pumpHours))
-    },
+    profile: activeProfile,
+    profiles,
+    activeProfileId,
     maintenance: { ...DEFAULT_STATE.maintenance, ...(saved.maintenance || {}) },
     waterTestReminder: { ...DEFAULT_STATE.waterTestReminder, ...(saved.waterTestReminder || {}) },
     floaterReminder: { ...DEFAULT_STATE.floaterReminder, ...(saved.floaterReminder || {}) },
