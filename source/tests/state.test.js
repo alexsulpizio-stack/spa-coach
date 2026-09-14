@@ -10,6 +10,8 @@ test('legacy state is normalized and versioned',()=>{
   assert.equal(migrated.stateSchemaVersion,STATE_SCHEMA_VERSION);
   assert.equal(migrated.profile.name,'Legacy');
   assert.equal(migrated.profile.volume,290);
+  assert.equal(migrated.profile.bodyOfWater,'spa');
+  assert.equal(migrated.profile.sanitizerSystem,'chlorine');
   assert.ok(migrated.inventory.some(item=>item.id==='neutralizer'));
   assert.ok(migrated.inventory.some(item=>item.id==='chlorineTabs'));
   assert.deepEqual(migrated.history,[]);
@@ -22,6 +24,14 @@ test('state migration caps learned colors and history',()=>{
   });
   assert.equal(migrated.history.length,200);
   assert.equal(migrated.scannerCalibrations.length,72);
+});
+
+test('pool salt profiles are preserved and normalized',()=>{
+  const migrated=migrateState({profile:{bodyOfWater:'pool',sanitizerSystem:'salt',saltTarget:'3400',pumpHours:12}});
+  assert.equal(migrated.profile.bodyOfWater,'pool');
+  assert.equal(migrated.profile.sanitizerSystem,'salt');
+  assert.equal(migrated.profile.saltTarget,3400);
+  assert.equal(migrated.profile.pumpHours,12);
 });
 
 test('newer logged water tests clear stale follow-up reminders',()=>{
@@ -43,3 +53,4 @@ test('current follow-up remains attached to the latest logged test',()=>{
   });
   assert.deepEqual(migrated.pendingFollowUp,followUp);
 });
+
