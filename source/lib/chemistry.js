@@ -79,12 +79,14 @@ const GENERIC_PRODUCTS = Object.freeze({
 
 function treatmentPlan(readings, gallons, inventory = [], options = {}) {
   const generic = Boolean(options.generic);
+  const saltSystem = options.sanitizerSystem === 'salt';
+  const pool = options.bodyOfWater === 'pool';
   const freeChlorine = num(readings.freeChlorine);
   const ph = num(readings.ph);
   const alkalinity = num(readings.alkalinity);
   const scale = gallons / 500;
   const sanitizerDose = inventoryDose(inventory, 'sanitizer', 0.5) * scale;
-  const sanitizerName = generic ? GENERIC_PRODUCTS.sanitizer : inventoryName(inventory, 'sanitizer', 'Leisure Time Spa 56');
+  const sanitizerName = saltSystem ? 'Salt chlorine generator' : (generic ? GENERIC_PRODUCTS.sanitizer : inventoryName(inventory, 'sanitizer', 'Leisure Time Spa 56'));
   const tabName = generic ? GENERIC_PRODUCTS.chlorineTabs : inventoryName(inventory, 'chlorineTabs', 'Chlorine tablets (1-inch)');
   const tabDose = chlorineTabDose(gallons, inventory);
   const tabCount = chlorineTabCount(gallons, inventory);
@@ -118,18 +120,20 @@ function treatmentPlan(readings, gallons, inventory = [], options = {}) {
   if (Number.isFinite(freeChlorine) && freeChlorine < 3) return {
     action: 'dose', focus: 'free chlorine', followUpTitle: 'Retest free chlorine', retestMinutes: 5,
     title: 'Raise free chlorine first',
-    explanation: `Free chlorine is ${freeChlorine} ppm. Use ${sanitizerName} now to bring sanitizer up. After it is in the 3–10 ppm range, a chlorine tab in a floater can hold it between tests.`,
+    explanation: saltSystem
+      ? `Free chlorine is ${freeChlorine} ppm. Increase salt-cell output or pump runtime according to the generator manual, then retest before swimming.`
+      : `Free chlorine is ${freeChlorine} ppm. Use ${sanitizerName} now to bring sanitizer up. After it is in the 3–10 ppm range, a chlorine tab in a floater can hold it between tests.`,
     product: sanitizerName,
     dose: `Label-scaled regular dose for ${gallons} gal: about ${ouncesWithGrams(sanitizerDose)}`,
     products: [
       { label: 'Raise now', name: sanitizerName, dose: `Label-scaled regular dose for ${gallons} gal: about ${ouncesWithGrams(sanitizerDose)}` },
-      { label: 'Then hold', name: tabName, dose: tabDose }
+      ...(saltSystem ? [] : [{ label: 'Then hold', name: tabName, dose: tabDose }])
     ],
     steps: [
       `Measure about ${ouncesWithGrams(sanitizerDose)} of ${sanitizerName}.`,
       'Add it according to the product label with circulation running.',
       'Circulate for 5 minutes and retest free chlorine before using the spa or adding more.',
-      `When free chlorine is 3–10 ppm, add ${tabNoun} to a floating feeder. Do not drop tabs on the spa floor or next to metal fittings.`,
+      ...(saltSystem ? ['After the generator has run, retest free chlorine before swimming or adding any manual chlorine.'] : [`When free chlorine is 3–10 ppm, add ${tabNoun} to a floating feeder. Do not drop tabs on the spa floor or next to metal fittings.`]),
       generic
         ? 'Do not add a tablet in the same step as granular sanitizer. Retest first, then start the feeder.'
         : 'Do not add a tab in the same step as Spa 56. Retest first, then start the feeder.',
@@ -233,3 +237,4 @@ globalThis.SpaChemistry = Object.freeze({
   unresolvedIssuesFor
 });
 })();
+

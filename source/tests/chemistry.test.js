@@ -54,6 +54,15 @@ test('in-range water offers an optional chlorine tab hold below 8 ppm', () => {
   assert.match(plan.products[0].dose, /1 tablet/);
 });
 
+test('salt pool plans point to generator output instead of a floater', () => {
+  const plan = treatmentPlan({ freeChlorine: 2, ph: 7.4 }, 12000, inventory, { bodyOfWater: 'pool', sanitizerSystem: 'salt' });
+  assert.equal(plan.focus, 'free chlorine');
+  assert.equal(plan.product, 'Salt chlorine generator');
+  assert.equal(plan.products.length, 1);
+  assert.match(plan.explanation, /salt-cell output|pump runtime/);
+  assert.equal(plan.products[0].name, 'Salt chlorine generator');
+});
+
 test('chlorine tab count is at least one and scales by volume', () => {
   const { chlorineTabCount } = globalThis.SpaChemistry;
   assert.equal(chlorineTabCount(290, inventory), 1);
@@ -96,3 +105,4 @@ test('unresolved issues retain sanitizer-first priority', () => {
     ['fc-low', 'ph-high', 'ta-low']
   );
 });
+
