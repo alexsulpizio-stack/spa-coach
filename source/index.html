@@ -249,12 +249,20 @@
         <button class="back-btn" data-go="homeScreen">← Home</button>
         <div class="card">
           <div class="step-kicker">SETTINGS</div>
-          <h2>Spa profile</h2>
-          <label class="field">Spa name<input id="spaNameInput" value="My PureSpa" /></label>
-          <label class="field">Volume (gallons)<input id="spaVolumeInput" type="number" min="1" value="290" /></label>
-          <label class="field">Sanitizer
-            <select id="sanitizerInput"><option value="chlorine">Chlorine</option></select>
+          <h2>Water profile</h2>
+          <label class="field">Name<input id="spaNameInput" value="My PureSpa" /></label>
+          <label class="field">Body of water
+            <select id="bodyOfWaterInput"><option value="spa">Spa / hot tub</option><option value="pool">Pool</option></select>
           </label>
+          <label class="field">Volume (gallons)<input id="spaVolumeInput" type="number" min="1" value="290" /></label>
+          <label class="field">Sanitizer system
+            <select id="sanitizerInput"><option value="chlorine">Chlorine</option><option value="salt">Salt chlorine generator</option></select>
+          </label>
+          <div id="saltSettings" class="settings-subsection hidden">
+            <label class="field">Target salt (ppm)<input id="saltTargetInput" type="number" min="0" value="3200" /></label>
+            <label class="field">Pump runtime per day (hours)<input id="pumpHoursInput" type="number" min="1" max="24" value="8" /></label>
+            <p class="muted small">A salt system still makes chlorine. Test free chlorine and pH, and use the cell/pump settings to maintain production.</p>
+          </div>
           <button class="primary full" id="saveSettingsBtn">SAVE PROFILE</button>
         </div>
 
@@ -349,3 +357,4 @@
   <script src="app.js"></script>
 </body>
 </html>
+
