@@ -1183,6 +1183,11 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   };
 
   function renderSettings() {
+    const profileSelect = $('profileSelect');
+    if (profileSelect) {
+      profileSelect.innerHTML = (state.profiles || [state.profile]).map(profile => `<option value="${escapeHtml(profile.id)}">${escapeHtml(profile.name || 'Unnamed profile')} · ${profile.bodyOfWater === 'pool' ? 'Pool' : 'Spa'}</option>`).join('');
+      profileSelect.value = state.activeProfileId || state.profile.id;
+    }
     $('spaNameInput').value=state.profile.name;
     $('bodyOfWaterInput').value=state.profile.bodyOfWater || 'spa';
     $('spaVolumeInput').value=state.profile.volume;
@@ -1273,8 +1278,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
       if (callout) callout.innerHTML = '<strong>Reminder opened.</strong> Time to retest your water. Use a fresh strip when you are ready.';
     }
   });
-  $('sanitizerInput').onchange = () => $('saltSettings').classList.toggle('hidden', $('sanitizerInput').value !== 'salt');
-  $('saveSettingsBtn').onclick = () => {
+  function persistActiveProfile() {
     state.profile.name=$('spaNameInput').value.trim() || 'My PureSpa';
     state.profile.bodyOfWater=$('bodyOfWaterInput').value === 'pool' ? 'pool' : 'spa';
     state.profile.volume=Math.max(1, Number($('spaVolumeInput').value)||290);
@@ -1282,6 +1286,27 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     state.profile.sanitizer=state.profile.sanitizerSystem;
     state.profile.saltTarget=Math.max(0, Number($('saltTargetInput').value)||3200);
     state.profile.pumpHours=Math.min(24, Math.max(1, Number($('pumpHoursInput').value)||8));
+    const index = (state.profiles || []).findIndex(profile => profile.id === state.activeProfileId);
+    if (index >= 0) state.profiles[index] = { ...state.profile };
+  }
+  $('sanitizerInput').onchange = () => $('saltSettings').classList.toggle('hidden', $('sanitizerInput').value !== 'salt');
+  $('profileSelect').onchange = () => {
+    persistActiveProfile();
+    const next = state.profiles.find(profile => profile.id === $('profileSelect').value);
+    if (!next) return;
+    state.activeProfileId = next.id;
+    state.profile = { ...next };
+    saveState(); renderSettings(); renderHome();
+  };
+  $('addProfileBtn').onclick = () => {
+    persistActiveProfile();
+    const id = `profile-${Date.now()}`;
+    const next = { ...globalThis.SpaState.DEFAULT_STATE.profile, id, name: 'New Pool' };
+    state.profiles.push(next); state.activeProfileId = id; state.profile = { ...next };
+    saveState(); renderSettings(); renderHome();
+  };
+  $('saveSettingsBtn').onclick = () => {
+    persistActiveProfile();
     saveState(); showScreen('homeScreen');
   };
 
