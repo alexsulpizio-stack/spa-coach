@@ -561,7 +561,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   $('editReadingsBtn').onclick = () => { renderReadingForm(); showScreen('editScreen'); };
 
   $('logResultBtn').onclick = async () => {
-    const plan = treatmentPlan(state.readings || {}, state.profile.volume, state.inventory);
+    const plan = treatmentPlan(state.readings || {}, state.profile.volume, state.inventory, state.profile);
     const photoSaved = await logCurrentTest(plan, false, {
       createFollowUp: plan.action !== 'none',
       delayMinutes: null,
@@ -762,7 +762,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   };
 
   function renderTreatment() {
-    const plan = treatmentPlan(state.readings || {}, state.profile.volume, state.inventory);
+    const plan = treatmentPlan(state.readings || {}, state.profile.volume, state.inventory, state.profile);
     state.currentPlan = plan;
     const c = $('treatmentContent');
     const configurableRetest = plan.retestMode === 'configurable';
@@ -825,7 +825,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   }
 
   $('logTreatmentBtn').onclick = async () => {
-    const plan = state.currentPlan || treatmentPlan(state.readings || {}, state.profile.volume, state.inventory);
+    const plan = state.currentPlan || treatmentPlan(state.readings || {}, state.profile.volume, state.inventory, state.profile);
     const delay = selectedRetestDelay(plan);
     const treatmentDone = plan.action === 'dose';
     const photoSaved = await logCurrentTest(plan, treatmentDone, { createFollowUp: plan.action !== 'none', delayMinutes: delay });
@@ -834,7 +834,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   };
 
   $('skipTreatmentBtn').onclick = async () => {
-    const plan = state.currentPlan || treatmentPlan(state.readings || {}, state.profile.volume, state.inventory);
+    const plan = state.currentPlan || treatmentPlan(state.readings || {}, state.profile.volume, state.inventory, state.profile);
     if (plan.action === 'wait') {
       const hadPhoto = Boolean(currentPhotoFullBlob);
       const photoSaved = await logCurrentTest(plan, false, { createFollowUp:true, delayMinutes:0 });
@@ -917,8 +917,10 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
 
   function renderHome() {
     const profile=state.profile;
-    document.querySelector('#homeScreen .hero-card h2').textContent = profile.name || 'My PureSpa';
-    document.querySelector('#homeScreen .hero-card .hero-row .muted:last-child').textContent = `6-person · ${profile.volume} gal · Chlorine`;
+    document.querySelector('#homeScreen .hero-card h2').textContent = profile.name || (profile.bodyOfWater === 'pool' ? 'My Pool' : 'My PureSpa');
+    const bodyLabel = profile.bodyOfWater === 'pool' ? 'Pool' : 'Spa';
+    const systemLabel = profile.sanitizerSystem === 'salt' ? 'Salt chlorine' : 'Chlorine';
+    document.querySelector('#homeScreen .hero-card .hero-row .muted:last-child').textContent = `${bodyLabel} · ${profile.volume} gal · ${systemLabel}`;
     document.querySelector('.spa-badge').innerHTML = `${profile.volume}<br><span>GAL</span>`;
     const panel=$('homeStatus');
     if (state.readings) {
@@ -1174,8 +1176,12 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
 
   function renderSettings() {
     $('spaNameInput').value=state.profile.name;
+    $('bodyOfWaterInput').value=state.profile.bodyOfWater || 'spa';
     $('spaVolumeInput').value=state.profile.volume;
-    $('sanitizerInput').value=state.profile.sanitizer;
+    $('sanitizerInput').value=state.profile.sanitizerSystem || state.profile.sanitizer || 'chlorine';
+    $('saltTargetInput').value=state.profile.saltTarget || 3200;
+    $('pumpHoursInput').value=state.profile.pumpHours || 8;
+    $('saltSettings').classList.toggle('hidden', $('sanitizerInput').value !== 'salt');
     const installedVersion = $('installedVersion');
     if (installedVersion) {
       let version = APP_VERSION;
@@ -1259,10 +1265,15 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
       if (callout) callout.innerHTML = '<strong>Reminder opened.</strong> Time to retest your water. Use a fresh strip when you are ready.';
     }
   });
+  $('sanitizerInput').onchange = () => $('saltSettings').classList.toggle('hidden', $('sanitizerInput').value !== 'salt');
   $('saveSettingsBtn').onclick = () => {
     state.profile.name=$('spaNameInput').value.trim() || 'My PureSpa';
+    state.profile.bodyOfWater=$('bodyOfWaterInput').value === 'pool' ? 'pool' : 'spa';
     state.profile.volume=Math.max(1, Number($('spaVolumeInput').value)||290);
-    state.profile.sanitizer=$('sanitizerInput').value;
+    state.profile.sanitizerSystem=$('sanitizerInput').value === 'salt' ? 'salt' : 'chlorine';
+    state.profile.sanitizer=state.profile.sanitizerSystem;
+    state.profile.saltTarget=Math.max(0, Number($('saltTargetInput').value)||3200);
+    state.profile.pumpHours=Math.min(24, Math.max(1, Number($('pumpHoursInput').value)||8));
     saveState(); showScreen('homeScreen');
   };
 
@@ -1347,3 +1358,4 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   renderHome();
   if (!state.onboardingComplete) showScreen('onboardingScreen');
 })();
+
