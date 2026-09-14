@@ -34,7 +34,7 @@ test('manual readings produce conservative treatment guidance',async({page})=>{
   await page.locator('#edit_ph').selectOption('7.2');
   await page.getByRole('button',{name:'USE THESE READINGS'}).click();
   await expect(page.locator('#logResultBtn')).toBeVisible();
-  await expect(page.locator('#logResultBtn')).toHaveText('LOG THIS TEST WITHOUT TREATMENT');
+  await expect(page.locator('#logResultBtn')).toHaveText('LOG THIS TEST');
   await expect(page.getByText("DON'T USE THE SPA YET")).toBeVisible();
   await page.getByRole('button',{name:'WHAT SHOULD I DO?'}).click();
   await expect(page.getByRole('heading',{name:'Raise free chlorine first'})).toBeVisible();
