@@ -280,8 +280,9 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   const zoomCanvas = $('padZoomCanvas');
   const zoomCtx = zoomCanvas.getContext('2d');
   const zoomLabel = $('padZoomLabel');
-  const ZOOM_SIZE = 220;
-  const ZOOM_FACTOR = 3.5;
+  const zoomColor = $('padZoomColor');
+  const ZOOM_SIZE = 280;
+  const ZOOM_FACTOR = 5;
 
   function drawScanImage() {
     if (!sourceImage) return;
@@ -310,7 +311,14 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     zoomCtx.moveTo(ZOOM_SIZE / 2 - 12, ZOOM_SIZE / 2); zoomCtx.lineTo(ZOOM_SIZE / 2 + 12, ZOOM_SIZE / 2);
     zoomCtx.moveTo(ZOOM_SIZE / 2, ZOOM_SIZE / 2 - 12); zoomCtx.lineTo(ZOOM_SIZE / 2, ZOOM_SIZE / 2 + 12);
     zoomCtx.stroke();
-    if (zoomLabel) zoomLabel.textContent = padNumber > PAD_ORDER.length ? 'Magnified view' : `Pad ${padNumber} magnified`;
+    if (zoomLabel) zoomLabel.textContent = padNumber > PAD_ORDER.length ? 'Magnified view' : `Pad ${padNumber} magnified · ${PAD_ORDER[padNumber - 1]?.name || 'color'}`;
+    if (zoomColor) {
+      const sample = samplePatch(point.x, point.y);
+      const rgb = sample?.rgb;
+      zoomColor.innerHTML = Array.isArray(rgb)
+        ? `<span class="sample-swatch" style="background:${rgbCss(rgb)}" aria-hidden="true"></span> Sampled color: RGB ${rgb.join(', ')}`
+        : 'Color sample: not available yet';
+    }
   }
 
   function drawTapMarker(x, y, n) {
