@@ -56,19 +56,22 @@ public class SpaBridge {
 
     @JavascriptInterface
     public void scheduleReminder(String key, long atMillis, String title, String body) {
+        // Persist and arm the alarm immediately. The bridge call can be followed
+        // by the app being backgrounded, so queueing the actual schedule on the
+        // UI thread could lose a newly logged reminder.
+        ReminderScheduler.schedule(activity, key, atMillis, title, body);
         activity.runOnUiThread(() -> {
             if (Build.VERSION.SDK_INT >= 33 && activity.checkSelfPermission(Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) {
                 prefs.edit().putBoolean("notification_permission_asked", true).apply();
                 activity.requestNotificationPermissionIfNeeded();
             }
-            ReminderScheduler.schedule(activity, key, atMillis, title, body);
             requestExactAlarmPermissionOnceIfNeeded();
         });
     }
 
     @JavascriptInterface
     public void cancelReminder(String key) {
-        activity.runOnUiThread(() -> ReminderScheduler.cancel(activity, key));
+        ReminderScheduler.cancel(activity, key);
     }
 
     @JavascriptInterface
