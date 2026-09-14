@@ -34,6 +34,19 @@ test('pool salt profiles are preserved and normalized',()=>{
   assert.equal(migrated.profile.pumpHours,12);
 });
 
+test('multiple water profiles preserve the selected profile',()=>{
+  const migrated=migrateState({
+    profiles:[
+      {id:'spa',name:'Hot tub',bodyOfWater:'spa',volume:290},
+      {id:'pool',name:'Salt pool',bodyOfWater:'pool',sanitizerSystem:'salt',volume:12000}
+    ],
+    activeProfileId:'pool'
+  });
+  assert.equal(migrated.activeProfileId,'pool');
+  assert.equal(migrated.profile.name,'Salt pool');
+  assert.equal(migrated.profiles.length,2);
+});
+
 test('newer logged water tests clear stale follow-up reminders',()=>{
   const migrated=migrateState({
     history:[
