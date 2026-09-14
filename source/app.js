@@ -925,6 +925,11 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
 
   function renderHome() {
     const profile=state.profile;
+    const homeProfileSelect = $('homeProfileSelect');
+    if (homeProfileSelect) {
+      homeProfileSelect.innerHTML = (state.profiles || [state.profile]).map(item => `<option value="${escapeHtml(item.id)}">${escapeHtml(item.name || 'Unnamed profile')} · ${item.bodyOfWater === 'pool' ? 'Pool' : 'Spa'}</option>`).join('');
+      homeProfileSelect.value = state.activeProfileId || state.profile.id;
+    }
     document.querySelector('#homeScreen .hero-card h2').textContent = profile.name || (profile.bodyOfWater === 'pool' ? 'My Pool' : 'My PureSpa');
     const bodyLabel = profile.bodyOfWater === 'pool' ? 'Pool' : 'Spa';
     const systemLabel = profile.sanitizerSystem === 'salt' ? 'Salt chlorine' : 'Chlorine';
@@ -1293,6 +1298,14 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   $('profileSelect').onchange = () => {
     persistActiveProfile();
     const next = state.profiles.find(profile => profile.id === $('profileSelect').value);
+    if (!next) return;
+    state.activeProfileId = next.id;
+    state.profile = { ...next };
+    saveState(); renderSettings(); renderHome();
+  };
+  $('homeProfileSelect').onchange = () => {
+    persistActiveProfile();
+    const next = state.profiles.find(profile => profile.id === $('homeProfileSelect').value);
     if (!next) return;
     state.activeProfileId = next.id;
     state.profile = { ...next };
