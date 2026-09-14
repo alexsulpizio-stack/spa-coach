@@ -544,6 +544,13 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     const tcNow = num(readings.totalChlorine), fcNow = num(readings.freeChlorine);
     const chemistryConflict = isChemistryConflict(tcNow, fcNow);
     $('treatmentBtn').textContent = (criticalLow || chemistryConflict) ? 'REVIEW READINGS FIRST' : 'WHAT SHOULD I DO?';
+    const logResultButton = $('logResultBtn');
+    if (logResultButton) {
+      logResultButton.textContent = criticalLow || chemistryConflict
+        ? 'LOG THIS TEST WITHOUT TREATMENT'
+        : 'LOG THIS TEST';
+      logResultButton.disabled = false;
+    }
     if (Object.values(details).some(d => d?.confidence === 'low' || d?.uncertain)) warnings.push('One or more pads are uncertain. Review those values against the bottle chart before relying on them.');
     if (Object.values(details).some(d => d?.reason === 'uneven-pad')) warnings.push('A pad was marked not readable because its center color was too uneven to measure reliably.');
     if (details.totalChlorine?.reason === 'chemistry-conflict' || chemistryConflict) warnings.push('Total chlorine cannot be lower than free chlorine. Correct the reading or mark Total Chlorine Unknown / skip before treatment.');
@@ -552,6 +559,17 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   }
 
   $('editReadingsBtn').onclick = () => { renderReadingForm(); showScreen('editScreen'); };
+
+  $('logResultBtn').onclick = async () => {
+    const plan = treatmentPlan(state.readings || {}, state.profile.volume, state.inventory);
+    const photoSaved = await logCurrentTest(plan, false, {
+      createFollowUp: plan.action !== 'none',
+      delayMinutes: null,
+      treatmentSkipped: plan.action === 'dose'
+    });
+    showScreen('homeScreen');
+    if (currentPhotoFullBlob && !photoSaved) setTimeout(() => alert('The test was logged, but the strip photo could not be saved on this device.'), 50);
+  };
 
   function reviewPresetValue(pad, detail, readings) {
     let selected = detail.invalid ? '__unknown' : (readings[pad.key] ?? detail.candidate ?? detail.value ?? '');
