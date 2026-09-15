@@ -27,8 +27,9 @@ test('state migration caps learned colors and history',()=>{
 });
 
 test('pool salt profiles are preserved and normalized',()=>{
-  const migrated=migrateState({profile:{bodyOfWater:'pool',sanitizerSystem:'salt',saltTarget:'3400',pumpHours:12}});
+  const migrated=migrateState({profile:{bodyOfWater:'pool',poolType:'in-ground',sanitizerSystem:'salt',saltTarget:'3400',pumpHours:12}});
   assert.equal(migrated.profile.bodyOfWater,'pool');
+  assert.equal(migrated.profile.poolType,'in-ground');
   assert.equal(migrated.profile.sanitizerSystem,'salt');
   assert.equal(migrated.profile.saltTarget,3400);
   assert.equal(migrated.profile.pumpHours,12);
