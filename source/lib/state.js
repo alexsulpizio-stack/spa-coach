@@ -24,6 +24,7 @@ const DEFAULT_STATE = {
   lastFilterRinse: null,
   lastDrainRefill: null,
   lastFilterReplacement: null,
+  poolClosing: { startedAt: null, completedSteps: [], closedAt: null },
   lastFloaterCheck: null,
   pendingFollowUp: null,
   unresolvedIssues: [],
@@ -100,6 +101,11 @@ function migrateState(input) {
     inventory,
     history,
     pendingFollowUp: reconciledFollowUp,
+    poolClosing: {
+      startedAt: saved.poolClosing?.startedAt || null,
+      completedSteps: Array.isArray(saved.poolClosing?.completedSteps) ? saved.poolClosing.completedSteps.filter(Number.isInteger) : [],
+      closedAt: saved.poolClosing?.closedAt || null
+    },
     scannerCalibrations: Array.isArray(saved.scannerCalibrations) ? saved.scannerCalibrations.slice(-72) : []
   };
 }

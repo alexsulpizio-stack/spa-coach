@@ -61,6 +61,13 @@ test('legacy duplicate profiles gain a pool option during migration',()=>{
   assert.equal(migrated.profiles[1].volume,9336);
 });
 
+test('pool closing checklist state is preserved safely',()=>{
+  const migrated=migrateState({poolClosing:{startedAt:'2026-09-14T12:00:00.000Z',completedSteps:[0,2,'bad'],closedAt:null}});
+  assert.equal(migrated.poolClosing.startedAt,'2026-09-14T12:00:00.000Z');
+  assert.deepEqual(migrated.poolClosing.completedSteps,[0,2]);
+  assert.equal(migrated.poolClosing.closedAt,null);
+});
+
 test('newer logged water tests clear stale follow-up reminders',()=>{
   const migrated=migrateState({
     history:[
