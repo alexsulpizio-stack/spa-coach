@@ -44,7 +44,9 @@ jobs:
         id: release
         run: node source/scripts/verify-version.mjs --github-publish
 
-      - uses: android-actions/setup-android@v3
+      - uses: android-actions/setup-android@v4
+        with:
+          packages: ''
 
       - uses: gradle/actions/setup-gradle@v4
 
