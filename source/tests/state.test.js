@@ -52,6 +52,7 @@ test('profile contexts keep readings and strip history separated',()=>{
   const migrated=migrateState({
     profiles:[{id:'spa',name:'Spa'},{id:'pool',name:'Pool',bodyOfWater:'pool'}],
     activeProfileId:'pool',
+    profileContextVersion:2,
     profileData:{
       spa:{readings:{ph:7.2},history:[{id:'spa-test',type:'water-test'}]},
       pool:{readings:{ph:7.6},history:[{id:'pool-test',type:'water-test'}]}
@@ -61,6 +62,17 @@ test('profile contexts keep readings and strip history separated',()=>{
   assert.equal(migrated.profileData.spa.history[0].profileId,'spa');
   assert.deepEqual(migrated.profileData.pool.readings,{ph:7.6});
   assert.equal(migrated.profileData.pool.history[0].profileId,'pool');
+});
+
+test('legacy untagged history is assigned to the spa profile',()=>{
+  const migrated=migrateState({
+    profiles:[{id:'spa',name:'Spa'},{id:'pool',name:'Pool',bodyOfWater:'pool'}],
+    activeProfileId:'pool',
+    history:[{id:'old-test',type:'water-test'}]
+  });
+  assert.equal(migrated.profileData.spa.history[0].profileId,'spa');
+  assert.equal(migrated.profileData.pool.history.length,0);
+  assert.equal(migrated.profileContextVersion,2);
 });
 
 test('legacy duplicate profiles gain a pool option during migration',()=>{
