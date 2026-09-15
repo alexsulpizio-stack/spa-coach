@@ -1,3 +1,6 @@
+Warning: truncated output (original token count: 1109)
+Total output lines: 106
+
 import test from 'node:test';
 import assert from 'node:assert/strict';
 
@@ -45,7 +48,10 @@ test('multiple water profiles preserve the selected profile',()=>{
   });
   assert.equal(migrated.activeProfileId,'pool');
   assert.equal(migrated.profile.name,'Salt pool');
-  assert.equal(migrated.profiles.length,2);
+  assert.equal(migr…109 tokens truncated…pEqual(migrated.profileData.spa.readings,{ph:7.2});
+  assert.equal(migrated.profileData.spa.history[0].profileId,'spa');
+  assert.deepEqual(migrated.profileData.pool.readings,{ph:7.6});
+  assert.equal(migrated.profileData.pool.history[0].profileId,'pool');
 });
 
 test('legacy duplicate profiles gain a pool option during migration',()=>{
