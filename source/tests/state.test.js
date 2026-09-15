@@ -47,6 +47,20 @@ test('multiple water profiles preserve the selected profile',()=>{
   assert.equal(migrated.profiles.length,2);
 });
 
+test('legacy duplicate profiles gain a pool option during migration',()=>{
+  const migrated=migrateState({
+    profile:{name:'My PureSpa',bodyOfWater:'spa',volume:290},
+    profiles:[
+      {id:'spa-default',name:'My PureSpa',bodyOfWater:'spa',volume:290},
+      {id:'profile-2',name:'My PureSpa',bodyOfWater:'spa',volume:290}
+    ],
+    activeProfileId:'spa-default'
+  });
+  assert.equal(migrated.profiles[1].bodyOfWater,'pool');
+  assert.equal(migrated.profiles[1].name,'My Pool');
+  assert.equal(migrated.profiles[1].volume,9336);
+});
+
 test('newer logged water tests clear stale follow-up reminders',()=>{
   const migrated=migrateState({
     history:[

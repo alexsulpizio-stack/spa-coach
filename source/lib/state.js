@@ -77,6 +77,14 @@ function migrateState(input) {
     saltTarget: Math.max(0, Number(profile?.saltTarget ?? DEFAULT_STATE.profile.saltTarget) || DEFAULT_STATE.profile.saltTarget),
     pumpHours: Math.min(24, Math.max(1, Number(profile?.pumpHours ?? DEFAULT_STATE.profile.pumpHours) || DEFAULT_STATE.profile.pumpHours))
   }));
+  // Older builds could create a second profile that was just another spa copy.
+  // Give that accidental duplicate a useful pool identity after upgrading.
+  if (!profiles.some(profile => profile.bodyOfWater === 'pool') && profiles.length > 1) {
+    const poolCandidate = profiles[1];
+    poolCandidate.name = poolCandidate.name === 'My PureSpa' ? 'My Pool' : poolCandidate.name;
+    poolCandidate.bodyOfWater = 'pool';
+    if (poolCandidate.volume === DEFAULT_STATE.profile.volume) poolCandidate.volume = 9336;
+  }
   const activeProfileId = profiles.some(profile => profile.id === saved.activeProfileId) ? saved.activeProfileId : profiles[0].id;
   const activeProfile = profiles.find(profile => profile.id === activeProfileId) || profiles[0];
   return {
