@@ -917,15 +917,23 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     saveState(); syncNativeReminder(); renderHome();
   };
 
-  const poolClosingSteps = [
-    'Remove leaves and debris; brush and vacuum the pool.',
-    'Balance and shock the water according to your product labels.',
-    'Lower the water only as required for your climate and cover system; do not fully drain unless the manufacturer requires it.',
-    'Turn off the salt generator after the final treatment, if this pool uses salt chlorine.',
-    'Turn off, drain, and store the pump, filter, heater, hoses, and other removable equipment as directed.',
-    'Blow out and plug the plumbing lines if your winterizing setup requires it; add winterizing chemicals only as labeled.',
-    'Install and secure the cover, then record the closing date.'
-  ];
+  function getPoolClosingSteps() {
+    const typeStep = state.profile?.poolType === 'in-ground'
+      ? 'Lower the water below the skimmer only as required by your cover and local climate instructions; never drain an in-ground pool completely.'
+      : 'Never drain an above-ground pool completely; lower the water only as required for your cover system and local climate.';
+    const plumbingStep = state.profile?.poolType === 'in-ground'
+      ? 'Blow out and plug the skimmer, return, and cleaner lines; add pool antifreeze only if your equipment instructions call for it.'
+      : 'Disconnect, drain, and store the above-ground pump, filter, hoses, and removable plumbing as directed.';
+    return [
+      'Remove leaves and debris; brush and vacuum the pool.',
+      'Balance and shock the water according to your product labels.',
+      typeStep,
+      'Turn off the salt generator after the final treatment, if this pool uses salt chlorine.',
+      'Turn off and drain the pump, filter, heater, and other removable equipment as directed.',
+      plumbingStep,
+      'Install and secure the correct cover, then record the closing date.'
+    ];
+  }
 
   $('poolClosingSteps').onclick = event => {
     const checkbox = event.target.closest('[data-pool-step]');
@@ -939,7 +947,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
 
   $('logPoolClosedBtn').onclick = () => {
     const now = new Date().toISOString();
-    state.poolClosing = { ...(state.poolClosing || {}), startedAt: state.poolClosing?.startedAt || now, completedSteps: poolClosingSteps.map((_, index) => index), closedAt: now };
+    state.poolClosing = { ...(state.poolClosing || {}), startedAt: state.poolClosing?.startedAt || now, completedSteps: getPoolClosingSteps().map((_, index) => index), closedAt: now };
     state.history.unshift({ id: String(Date.now()), at: now, type: 'pool-closing' });
     saveState(); syncNativeReminder(); renderPoolClosing(); renderHistory();
   };
@@ -1224,6 +1232,8 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     }
     $('spaNameInput').value=state.profile.name;
     $('bodyOfWaterInput').value=state.profile.bodyOfWater || 'spa';
+    $('poolTypeInput').value=state.profile.poolType || 'above-ground';
+    $('poolTypeField').classList.toggle('hidden', $('bodyOfWaterInput').value !== 'pool');
     $('spaVolumeInput').value=state.profile.volume;
     $('sanitizerInput').value=state.profile.sanitizerSystem || state.profile.sanitizer || 'chlorine';
     $('saltTargetInput').value=state.profile.saltTarget || 3200;
@@ -1315,6 +1325,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   function persistActiveProfile() {
     state.profile.name=$('spaNameInput').value.trim() || 'My PureSpa';
     state.profile.bodyOfWater=$('bodyOfWaterInput').value === 'pool' ? 'pool' : 'spa';
+    state.profile.poolType=$('poolTypeInput').value === 'in-ground' ? 'in-ground' : 'above-ground';
     state.profile.volume=Math.max(1, Number($('spaVolumeInput').value)||290);
     state.profile.sanitizerSystem=$('sanitizerInput').value === 'salt' ? 'salt' : 'chlorine';
     state.profile.sanitizer=state.profile.sanitizerSystem;
@@ -1324,6 +1335,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     if (index >= 0) state.profiles[index] = { ...state.profile };
   }
   $('sanitizerInput').onchange = () => $('saltSettings').classList.toggle('hidden', $('sanitizerInput').value !== 'salt');
+  $('bodyOfWaterInput').onchange = () => $('poolTypeField').classList.toggle('hidden', $('bodyOfWaterInput').value !== 'pool');
   $('profileSelect').onchange = () => {
     persistActiveProfile();
     const next = state.profiles.find(profile => profile.id === $('profileSelect').value);
@@ -1396,11 +1408,12 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     const isPool = state.profile?.bodyOfWater === 'pool';
     card.classList.toggle('hidden', !isPool);
     if (!isPool) return;
+    const closingSteps = getPoolClosingSteps();
     const completed = new Set(state.poolClosing?.completedSteps || []);
-    steps.innerHTML = poolClosingSteps.map((step, index) => `<label class="check-field"><input type="checkbox" data-pool-step="${index}" ${completed.has(index) ? 'checked' : ''}> <span>${escapeHtml(step)}</span></label>`).join('');
-    const allDone = completed.size === poolClosingSteps.length;
+    steps.innerHTML = closingSteps.map((step, index) => `<label class="check-field"><input type="checkbox" data-pool-step="${index}" ${completed.has(index) ? 'checked' : ''}> <span>${escapeHtml(step)}</span></label>`).join('');
+    const allDone = completed.size === closingSteps.length;
     button.disabled = !allDone;
-    status.textContent = state.poolClosing?.closedAt ? `Pool closed ${formatDateTime(state.poolClosing.closedAt)}.` : `${completed.size} of ${poolClosingSteps.length} steps complete.`;
+    status.textContent = state.poolClosing?.closedAt ? `Pool closed ${formatDateTime(state.poolClosing.closedAt)}.` : `${completed.size} of ${closingSteps.length} steps complete.`;
   }
   function formatDate(iso) { return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',year:'numeric'}).format(new Date(iso)); }
   function formatDateTime(iso) { return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(iso)); }
