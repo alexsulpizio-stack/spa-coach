@@ -45,6 +45,9 @@ jobs:
         run: node source/scripts/verify-version.mjs --github-publish
 
       - uses: android-actions/setup-android@v3
+        with:
+          # The action's legacy default includes the removed "tools" package.
+          packages: 'platform-tools'
 
       - uses: gradle/actions/setup-gradle@v4
 
@@ -128,4 +131,5 @@ jobs:
         with:
           name: Spa-Coach-v${{ env.VERSION }}
           path: Spa-Coach-v${{ env.VERSION }}.apk
+
 
