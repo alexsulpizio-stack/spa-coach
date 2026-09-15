@@ -1334,23 +1334,25 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     const index = (state.profiles || []).findIndex(profile => profile.id === state.activeProfileId);
     if (index >= 0) state.profiles[index] = { ...state.profile };
   }
+  function switchActiveProfile(profileId) {
+    const targetId = String(profileId || '');
+    const next = (state.profiles || []).find(profile => profile.id === targetId);
+    if (!next || next.id === state.activeProfileId) return;
+    // The settings form is only authoritative while it is visible. A Home
+    // profile switch must not copy stale settings fields into the profile
+    // being left behind.
+    if ($('settingsScreen')?.classList.contains('active')) persistActiveProfile();
+    state.activeProfileId = next.id;
+    state.profile = { ...next };
+    saveState(); renderSettings(); renderHome();
+  }
   $('sanitizerInput').onchange = () => $('saltSettings').classList.toggle('hidden', $('sanitizerInput').value !== 'salt');
   $('bodyOfWaterInput').onchange = () => $('poolTypeField').classList.toggle('hidden', $('bodyOfWaterInput').value !== 'pool');
   $('profileSelect').onchange = () => {
-    persistActiveProfile();
-    const next = state.profiles.find(profile => profile.id === $('profileSelect').value);
-    if (!next) return;
-    state.activeProfileId = next.id;
-    state.profile = { ...next };
-    saveState(); renderSettings(); renderHome();
+    switchActiveProfile($('profileSelect').value);
   };
   $('homeProfileSelect').onchange = () => {
-    persistActiveProfile();
-    const next = state.profiles.find(profile => profile.id === $('homeProfileSelect').value);
-    if (!next) return;
-    state.activeProfileId = next.id;
-    state.profile = { ...next };
-    saveState(); renderSettings(); renderHome();
+    switchActiveProfile($('homeProfileSelect').value);
   };
   $('addProfileBtn').onclick = () => {
     persistActiveProfile();
