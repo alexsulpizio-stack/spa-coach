@@ -917,6 +917,33 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     saveState(); syncNativeReminder(); renderHome();
   };
 
+  const poolClosingSteps = [
+    'Remove leaves and debris; brush and vacuum the pool.',
+    'Balance and shock the water according to your product labels.',
+    'Lower the water only as required for your climate and cover system; do not fully drain unless the manufacturer requires it.',
+    'Turn off the salt generator after the final treatment, if this pool uses salt chlorine.',
+    'Turn off, drain, and store the pump, filter, heater, hoses, and other removable equipment as directed.',
+    'Blow out and plug the plumbing lines if your winterizing setup requires it; add winterizing chemicals only as labeled.',
+    'Install and secure the cover, then record the closing date.'
+  ];
+
+  $('poolClosingSteps').onclick = event => {
+    const checkbox = event.target.closest('[data-pool-step]');
+    if (!checkbox) return;
+    const index = Number(checkbox.dataset.poolStep);
+    const completed = new Set(state.poolClosing?.completedSteps || []);
+    checkbox.checked ? completed.add(index) : completed.delete(index);
+    state.poolClosing = { ...(state.poolClosing || {}), startedAt: state.poolClosing?.startedAt || new Date().toISOString(), completedSteps: [...completed].sort((a,b)=>a-b), closedAt: state.poolClosing?.closedAt || null };
+    saveState(); renderPoolClosing();
+  };
+
+  $('logPoolClosedBtn').onclick = () => {
+    const now = new Date().toISOString();
+    state.poolClosing = { ...(state.poolClosing || {}), startedAt: state.poolClosing?.startedAt || now, completedSteps: poolClosingSteps.map((_, index) => index), closedAt: now };
+    state.history.unshift({ id: String(Date.now()), at: now, type: 'pool-closing' });
+    saveState(); syncNativeReminder(); renderPoolClosing(); renderHistory();
+  };
+
   $('logReplacementBtn').onclick = () => {
     const now=new Date().toISOString(); state.lastFilterReplacement=now;
     state.history.unshift({id:String(Date.now()),at:now,type:'filter-replacement'});
@@ -977,6 +1004,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     $('filterStatus').textContent = maintenanceStatus(state.lastFilterRinse, state.maintenance.filterDays, 'filter rinse');
     $('drainStatus').textContent = maintenanceStatus(state.lastDrainRefill, state.maintenance.drainDays, 'drain/refill');
     renderMaintenanceDashboard();
+    renderPoolClosing();
     renderHistoryInto($('recentHistory'), state.history.slice(0,3));
   }
 
@@ -987,6 +1015,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
       if (h.type==='filter-rinse') return `<div class="history-entry"><div class="history-entry-title">Filter rinsed</div><div class="history-entry-meta">${formatDateTime(h.at)}</div></div>`;
       if (h.type==='drain-refill') return `<div class="history-entry"><div class="history-entry-title">Spa drained and refilled</div><div class="history-entry-meta">${formatDateTime(h.at)}</div></div>`;
       if (h.type==='filter-replacement') return `<div class="history-entry"><div class="history-entry-title">Filter replaced</div><div class="history-entry-meta">${formatDateTime(h.at)}</div></div>`;
+      if (h.type==='pool-closing') return `<div class="history-entry"><div class="history-entry-title">Pool closed for the season</div><div class="history-entry-meta">${formatDateTime(h.at)}</div></div>`;
       const r=h.readings||{};
       const d=h.scanDetails||{};
       const safety=h.safety || evaluateSafety(r,d);
@@ -1357,6 +1386,21 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     const low=(state.inventory||[]).filter(i=>Number(i.quantity)<=Number(i.lowAt));
     el.innerHTML=items.map(([name,enabled,due])=>`<div class="maintenance-tile ${enabled?due.level:'neutral'}"><strong>${escapeHtml(name)}</strong><span>${enabled?escapeHtml(due.label):'Reminder off'}</span></div>`).join('')+
       `<div class="maintenance-tile ${low.length?'caution':'good'}"><strong>Chemical stock</strong><span>${low.length?`${low.length} low: ${low.map(i=>escapeHtml(i.name)).join(', ')}`:'Stock levels look good'}</span></div>`;
+  }
+  function renderPoolClosing() {
+    const card = $('poolClosingCard');
+    const steps = $('poolClosingSteps');
+    const button = $('logPoolClosedBtn');
+    const status = $('poolClosingStatus');
+    if (!card || !steps || !button || !status) return;
+    const isPool = state.profile?.bodyOfWater === 'pool';
+    card.classList.toggle('hidden', !isPool);
+    if (!isPool) return;
+    const completed = new Set(state.poolClosing?.completedSteps || []);
+    steps.innerHTML = poolClosingSteps.map((step, index) => `<label class="check-field"><input type="checkbox" data-pool-step="${index}" ${completed.has(index) ? 'checked' : ''}> <span>${escapeHtml(step)}</span></label>`).join('');
+    const allDone = completed.size === poolClosingSteps.length;
+    button.disabled = !allDone;
+    status.textContent = state.poolClosing?.closedAt ? `Pool closed ${formatDateTime(state.poolClosing.closedAt)}.` : `${completed.size} of ${poolClosingSteps.length} steps complete.`;
   }
   function formatDate(iso) { return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',year:'numeric'}).format(new Date(iso)); }
   function formatDateTime(iso) { return new Intl.DateTimeFormat(undefined,{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}).format(new Date(iso)); }
