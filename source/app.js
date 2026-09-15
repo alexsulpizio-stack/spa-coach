@@ -1314,7 +1314,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   $('addProfileBtn').onclick = () => {
     persistActiveProfile();
     const id = `profile-${Date.now()}`;
-    const next = { ...globalThis.SpaState.DEFAULT_STATE.profile, id, name: 'New Pool' };
+    const next = { ...globalThis.SpaState.DEFAULT_STATE.profile, id, name: 'My Pool', bodyOfWater: 'pool', volume: 9336 };
     state.profiles.push(next); state.activeProfileId = id; state.profile = { ...next };
     saveState(); renderSettings(); renderHome();
   };
