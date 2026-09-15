@@ -22,6 +22,7 @@ const DEFAULT_STATE = {
   scan: null,
   history: [],
   profileData: {},
+  profileContextVersion: 2,
   lastFilterRinse: null,
   lastDrainRefill: null,
   lastFilterReplacement: null,
@@ -91,13 +92,21 @@ function migrateState(input) {
   const activeProfileId = profiles.some(profile => profile.id === saved.activeProfileId) ? saved.activeProfileId : profiles[0].id;
   const activeProfile = profiles.find(profile => profile.id === activeProfileId) || profiles[0];
   const contextKeys = ['readings','scan','history','lastFilterRinse','lastDrainRefill','lastFilterReplacement','lastFloaterCheck','poolClosing','pendingFollowUp','unresolvedIssues'];
-  const rawProfileData = saved.profileData && typeof saved.profileData === 'object' ? saved.profileData : {};
+  const profileContextVersion = Number(saved.profileContextVersion || 0);
+  const legacyProfileId = profiles.find(profile => profile.bodyOfWater === 'spa')?.id || profiles[0].id;
+  const legacyHistory = profileContextVersion < 2
+    ? history.map(entry => ({ ...entry, profileId: legacyProfileId }))
+    : null;
+  const rawProfileData = profileContextVersion >= 2 && saved.profileData && typeof saved.profileData === 'object' ? saved.profileData : {};
   const profileData = {};
   profiles.forEach(profile => {
     const savedContext = rawProfileData[profile.id] && typeof rawProfileData[profile.id] === 'object' ? rawProfileData[profile.id] : null;
     const context = savedContext ? { ...savedContext } : {};
     contextKeys.forEach(key => { if (!(key in context)) context[key] = key === 'history' ? [] : (key === 'unresolvedIssues' ? [] : null); });
-    if (!savedContext && profile.id === activeProfileId) contextKeys.forEach(key => { if (key in saved) context[key] = clone(saved[key]); });
+    if (!savedContext && profile.id === legacyProfileId) {
+      contextKeys.forEach(key => { if (key in saved) context[key] = clone(saved[key]); });
+      if (legacyHistory) context.history = legacyHistory;
+    }
     context.history = (Array.isArray(context.history) ? context.history : []).slice(-200).map(entry => ({ ...entry, profileId: entry.profileId || profile.id }));
     context.poolClosing = { startedAt: context.poolClosing?.startedAt || null, completedSteps: Array.isArray(context.poolClosing?.completedSteps) ? context.poolClosing.completedSteps.filter(Number.isInteger) : [], closedAt: context.poolClosing?.closedAt || null };
     profileData[profile.id] = context;
@@ -113,8 +122,9 @@ function migrateState(input) {
     waterTestReminder: { ...DEFAULT_STATE.waterTestReminder, ...(saved.waterTestReminder || {}) },
     floaterReminder: { ...DEFAULT_STATE.floaterReminder, ...(saved.floaterReminder || {}) },
     inventory,
-    history,
+    history: profileContextVersion < 2 ? legacyHistory : history,
     profileData,
+    profileContextVersion: 2,
     pendingFollowUp: reconciledFollowUp,
     poolClosing: {
       startedAt: saved.poolClosing?.startedAt || null,
