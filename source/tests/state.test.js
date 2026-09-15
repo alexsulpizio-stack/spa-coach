@@ -48,6 +48,21 @@ test('multiple water profiles preserve the selected profile',()=>{
   assert.equal(migrated.profiles.length,2);
 });
 
+test('profile contexts keep readings and strip history separated',()=>{
+  const migrated=migrateState({
+    profiles:[{id:'spa',name:'Spa'},{id:'pool',name:'Pool',bodyOfWater:'pool'}],
+    activeProfileId:'pool',
+    profileData:{
+      spa:{readings:{ph:7.2},history:[{id:'spa-test',type:'water-test'}]},
+      pool:{readings:{ph:7.6},history:[{id:'pool-test',type:'water-test'}]}
+    }
+  });
+  assert.deepEqual(migrated.profileData.spa.readings,{ph:7.2});
+  assert.equal(migrated.profileData.spa.history[0].profileId,'spa');
+  assert.deepEqual(migrated.profileData.pool.readings,{ph:7.6});
+  assert.equal(migrated.profileData.pool.history[0].profileId,'pool');
+});
+
 test('legacy duplicate profiles gain a pool option during migration',()=>{
   const migrated=migrateState({
     profile:{name:'My PureSpa',bodyOfWater:'spa',volume:290},

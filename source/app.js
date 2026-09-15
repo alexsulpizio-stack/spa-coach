@@ -122,7 +122,21 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
       return migrateState(saved);
     } catch (_) { return migrateState(null); }
   }
-  function saveState() { localStorage.setItem('spaCoachState', JSON.stringify(state)); }
+  const PROFILE_CONTEXT_KEYS = ['readings','scan','history','lastFilterRinse','lastDrainRefill','lastFilterReplacement','lastFloaterCheck','poolClosing','pendingFollowUp','unresolvedIssues'];
+  function saveProfileContext() {
+    if (!state.profileData || !state.activeProfileId) state.profileData = {};
+    const context = state.profileData[state.activeProfileId] || {};
+    PROFILE_CONTEXT_KEYS.forEach(key => { context[key] = structuredClone(state[key]); });
+    context.history = (context.history || []).map(entry => ({ ...entry, profileId: entry.profileId || state.activeProfileId })).slice(0, 200);
+    state.profileData[state.activeProfileId] = context;
+  }
+  function hydrateProfileContext() {
+    const context = state.profileData?.[state.activeProfileId];
+    if (!context) return;
+    PROFILE_CONTEXT_KEYS.forEach(key => { if (key in context) state[key] = structuredClone(context[key]); });
+  }
+  function saveState() { saveProfileContext(); localStorage.setItem('spaCoachState', JSON.stringify(state)); }
+  hydrateProfileContext();
   // Strip photos are kept in IndexedDB, not localStorage. This keeps binary image
   // data separate from the small JSON state and lets history retain photos locally.
   const photoStore = createPhotoStore(window.indexedDB, APP_VERSION);
@@ -884,6 +898,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
       id,
       at,
       type: 'water-test',
+      profileId: state.activeProfileId,
       readings: structuredClone(state.readings),
       scanDetails: historyDetails,
       scanVersion: state.scan?.version || '0.1',
@@ -906,14 +921,14 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   $('logFilterBtn').onclick = () => {
     const now = new Date().toISOString();
     state.lastFilterRinse = now;
-    state.history.unshift({ id: String(Date.now()), at: now, type:'filter-rinse' });
+    state.history.unshift({ id: String(Date.now()), at: now, type:'filter-rinse', profileId: state.activeProfileId });
     saveState(); syncNativeReminder(); renderHome();
   };
 
   $('logDrainBtn').onclick = () => {
     const now = new Date().toISOString();
     state.lastDrainRefill = now;
-    state.history.unshift({ id: String(Date.now()), at: now, type:'drain-refill' });
+    state.history.unshift({ id: String(Date.now()), at: now, type:'drain-refill', profileId: state.activeProfileId });
     saveState(); syncNativeReminder(); renderHome();
   };
 
@@ -948,13 +963,13 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
   $('logPoolClosedBtn').onclick = () => {
     const now = new Date().toISOString();
     state.poolClosing = { ...(state.poolClosing || {}), startedAt: state.poolClosing?.startedAt || now, completedSteps: getPoolClosingSteps().map((_, index) => index), closedAt: now };
-    state.history.unshift({ id: String(Date.now()), at: now, type: 'pool-closing' });
+    state.history.unshift({ id: String(Date.now()), at: now, type: 'pool-closing', profileId: state.activeProfileId });
     saveState(); syncNativeReminder(); renderPoolClosing(); renderHistory();
   };
 
   $('logReplacementBtn').onclick = () => {
     const now=new Date().toISOString(); state.lastFilterReplacement=now;
-    state.history.unshift({id:String(Date.now()),at:now,type:'filter-replacement'});
+    state.history.unshift({id:String(Date.now()),at:now,type:'filter-replacement',profileId: state.activeProfileId});
     saveState(); syncNativeReminder(); renderHome(); renderSettings();
   };
 
@@ -1344,6 +1359,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     if ($('settingsScreen')?.classList.contains('active')) persistActiveProfile();
     state.activeProfileId = next.id;
     state.profile = { ...next };
+    hydrateProfileContext();
     saveState(); renderSettings(); renderHome();
   }
   $('sanitizerInput').onchange = () => $('saltSettings').classList.toggle('hidden', $('sanitizerInput').value !== 'salt');
@@ -1359,6 +1375,8 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
     const id = `profile-${Date.now()}`;
     const next = { ...globalThis.SpaState.DEFAULT_STATE.profile, id, name: 'My Pool', bodyOfWater: 'pool', volume: 9336 };
     state.profiles.push(next); state.activeProfileId = id; state.profile = { ...next };
+    state.profileData[id] = { readings:null, scan:null, history:[], lastFilterRinse:null, lastDrainRefill:null, lastFilterReplacement:null, lastFloaterCheck:null, poolClosing:{startedAt:null, completedSteps:[], closedAt:null}, pendingFollowUp:null, unresolvedIssues:[] };
+    hydrateProfileContext();
     saveState(); renderSettings(); renderHome();
   };
   $('saveSettingsBtn').onclick = () => {

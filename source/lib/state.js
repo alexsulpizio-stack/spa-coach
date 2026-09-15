@@ -21,6 +21,7 @@ const DEFAULT_STATE = {
   readings: null,
   scan: null,
   history: [],
+  profileData: {},
   lastFilterRinse: null,
   lastDrainRefill: null,
   lastFilterReplacement: null,
@@ -89,6 +90,18 @@ function migrateState(input) {
   }
   const activeProfileId = profiles.some(profile => profile.id === saved.activeProfileId) ? saved.activeProfileId : profiles[0].id;
   const activeProfile = profiles.find(profile => profile.id === activeProfileId) || profiles[0];
+  const contextKeys = ['readings','scan','history','lastFilterRinse','lastDrainRefill','lastFilterReplacement','lastFloaterCheck','poolClosing','pendingFollowUp','unresolvedIssues'];
+  const rawProfileData = saved.profileData && typeof saved.profileData === 'object' ? saved.profileData : {};
+  const profileData = {};
+  profiles.forEach(profile => {
+    const savedContext = rawProfileData[profile.id] && typeof rawProfileData[profile.id] === 'object' ? rawProfileData[profile.id] : null;
+    const context = savedContext ? { ...savedContext } : {};
+    contextKeys.forEach(key => { if (!(key in context)) context[key] = key === 'history' ? [] : (key === 'unresolvedIssues' ? [] : null); });
+    if (!savedContext && profile.id === activeProfileId) contextKeys.forEach(key => { if (key in saved) context[key] = clone(saved[key]); });
+    context.history = (Array.isArray(context.history) ? context.history : []).slice(-200).map(entry => ({ ...entry, profileId: entry.profileId || profile.id }));
+    context.poolClosing = { startedAt: context.poolClosing?.startedAt || null, completedSteps: Array.isArray(context.poolClosing?.completedSteps) ? context.poolClosing.completedSteps.filter(Number.isInteger) : [], closedAt: context.poolClosing?.closedAt || null };
+    profileData[profile.id] = context;
+  });
   return {
     ...clone(DEFAULT_STATE),
     ...saved,
@@ -101,6 +114,7 @@ function migrateState(input) {
     floaterReminder: { ...DEFAULT_STATE.floaterReminder, ...(saved.floaterReminder || {}) },
     inventory,
     history,
+    profileData,
     pendingFollowUp: reconciledFollowUp,
     poolClosing: {
       startedAt: saved.poolClosing?.startedAt || null,
