@@ -3,8 +3,8 @@ const STATE_SCHEMA_VERSION = 1;
 
 const DEFAULT_STATE = {
   stateSchemaVersion: STATE_SCHEMA_VERSION,
-  profile: { name: 'My PureSpa', volume: 290, sanitizer: 'chlorine', bodyOfWater: 'spa', sanitizerSystem: 'chlorine', saltTarget: 3200, pumpHours: 8 },
-  profiles: [{ id: 'spa-default', name: 'My PureSpa', volume: 290, sanitizer: 'chlorine', bodyOfWater: 'spa', sanitizerSystem: 'chlorine', saltTarget: 3200, pumpHours: 8 }],
+  profile: { name: 'My PureSpa', volume: 290, sanitizer: 'chlorine', bodyOfWater: 'spa', poolType: 'above-ground', sanitizerSystem: 'chlorine', saltTarget: 3200, pumpHours: 8 },
+  profiles: [{ id: 'spa-default', name: 'My PureSpa', volume: 290, sanitizer: 'chlorine', bodyOfWater: 'spa', poolType: 'above-ground', sanitizerSystem: 'chlorine', saltTarget: 3200, pumpHours: 8 }],
   activeProfileId: 'spa-default',
   onboardingComplete: false,
   inventory: [
@@ -74,6 +74,7 @@ function migrateState(input) {
     ...profile,
     id: String(profile?.id || `profile-${index + 1}`),
     bodyOfWater: profile?.bodyOfWater === 'pool' ? 'pool' : 'spa',
+    poolType: profile?.poolType === 'in-ground' ? 'in-ground' : 'above-ground',
     sanitizerSystem: profile?.sanitizerSystem === 'salt' ? 'salt' : 'chlorine',
     saltTarget: Math.max(0, Number(profile?.saltTarget ?? DEFAULT_STATE.profile.saltTarget) || DEFAULT_STATE.profile.saltTarget),
     pumpHours: Math.min(24, Math.max(1, Number(profile?.pumpHours ?? DEFAULT_STATE.profile.pumpHours) || DEFAULT_STATE.profile.pumpHours))
