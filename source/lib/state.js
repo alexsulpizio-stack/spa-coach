@@ -94,8 +94,13 @@ function migrateState(input) {
   const contextKeys = ['readings','scan','history','lastFilterRinse','lastDrainRefill','lastFilterReplacement','lastFloaterCheck','poolClosing','pendingFollowUp','unresolvedIssues'];
   const profileContextVersion = Number(saved.profileContextVersion || 0);
   const legacyProfileId = profiles.find(profile => profile.bodyOfWater === 'spa')?.id || profiles[0].id;
+  const legacySources = [
+    ...history,
+    ...Object.values(saved.profileData || {}).flatMap(context => Array.isArray(context?.history) ? context.history : [])
+  ];
   const legacyHistory = profileContextVersion < 2
-    ? history.map(entry => ({ ...entry, profileId: legacyProfileId }))
+    ? [...new Map(legacySources.filter(entry => entry && typeof entry === 'object' && entry.id != null).map(entry => [String(entry.id), entry])).values()]
+      .map(entry => ({ ...entry, profileId: legacyProfileId }))
     : null;
   const rawProfileData = profileContextVersion >= 2 && saved.profileData && typeof saved.profileData === 'object' ? saved.profileData : {};
   const profileData = {};
