@@ -75,6 +75,17 @@ test('legacy untagged history is assigned to the spa profile',()=>{
   assert.equal(migrated.profileContextVersion,2);
 });
 
+test('legacy history is recovered from old profile buckets',()=>{
+  const migrated=migrateState({
+    profiles:[{id:'spa',name:'Spa'},{id:'pool',name:'Pool',bodyOfWater:'pool'}],
+    activeProfileId:'pool',
+    profileData:{pool:{history:[{id:'old-test',type:'water-test'}]}}
+  });
+  assert.equal(migrated.profileData.spa.history[0].id,'old-test');
+  assert.equal(migrated.profileData.spa.history[0].profileId,'spa');
+  assert.equal(migrated.profileData.pool.history.length,0);
+});
+
 test('legacy duplicate profiles gain a pool option during migration',()=>{
   const migrated=migrateState({
     profile:{name:'My PureSpa',bodyOfWater:'spa',volume:290},
