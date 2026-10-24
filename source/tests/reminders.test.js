@@ -71,6 +71,30 @@ test('initial reminder clocks survive repeated syncs and app restart', () => {
   assert.equal(h.calls[1][1],now+3*86400000);
 });
 
+test('profile-scoped maintenance dates survive reminder writes and reloads', () => {
+  const rinse = '2026-08-20T12:00:00.000Z';
+  const h = reminderHarness({
+    activeProfileId:'spa',
+    profileData:{spa:{history:[{id:'rinse',type:'filter-rinse',at:rinse}],lastFilterRinse:null}}
+  });
+  h.context.SpaReminders.recoverMaintenanceDatesFromHistory();
+  let saved = JSON.parse(h.data.get('spaCoachState'));
+  assert.equal(saved.lastFilterRinse, rinse);
+  assert.equal(saved.profileData.spa.lastFilterRinse, rinse);
+  h.reload();
+  saved = JSON.parse(h.data.get('spaCoachState'));
+  assert.equal(saved.profileData.spa.lastFilterRinse, rinse);
+});
+
+test('floater checks persist in the active profile and its history', () => {
+  const h = reminderHarness({ activeProfileId:'spa', profileData:{spa:{history:[]}} });
+  assert.equal(h.context.SpaReminders.logFloaterCheck(), true);
+  const saved = JSON.parse(h.data.get('spaCoachState'));
+  assert.equal(saved.profileData.spa.lastFloaterCheck, saved.lastFloaterCheck);
+  assert.equal(saved.profileData.spa.history[0].type, 'floater-check');
+  assert.equal(saved.profileData.spa.history[0].profileId, 'spa');
+});
+
 test('logged actions reset clocks and reminder settings preserve custom cadence and disable', () => {
   const h = reminderHarness({waterTestReminder:{enabled:true,days:10},floaterReminder:{enabled:false,days:2}});
   h.context.SpaReminders.syncWaterTestReminder(now);

@@ -105,4 +105,3 @@ test('unresolved issues retain sanitizer-first priority', () => {
     ['fc-low', 'ph-high', 'ta-low']
   );
 });
-

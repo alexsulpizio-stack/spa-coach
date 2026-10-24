@@ -112,6 +112,11 @@ function migrateState(input) {
       contextKeys.forEach(key => { if (key in saved) context[key] = clone(saved[key]); });
       if (legacyHistory) context.history = legacyHistory;
     }
+    // Maintenance dates historically lived only at the top level. Copy them
+    // into the active profile when that profile bucket does not have them yet.
+    if (profile.id === activeProfileId) {
+      contextKeys.forEach(key => { if (!(key in context) && key in saved) context[key] = clone(saved[key]); });
+    }
     context.history = (Array.isArray(context.history) ? context.history : []).slice(-200).map(entry => ({ ...entry, profileId: entry.profileId || profile.id }));
     context.poolClosing = { startedAt: context.poolClosing?.startedAt || null, completedSteps: Array.isArray(context.poolClosing?.completedSteps) ? context.poolClosing.completedSteps.filter(Number.isInteger) : [], closedAt: context.poolClosing?.closedAt || null };
     profileData[profile.id] = context;
