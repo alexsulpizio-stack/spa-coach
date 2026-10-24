@@ -237,4 +237,3 @@ globalThis.SpaChemistry = Object.freeze({
   unresolvedIssuesFor
 });
 })();
-

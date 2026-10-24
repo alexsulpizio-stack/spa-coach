@@ -132,4 +132,3 @@ jobs:
           name: Spa-Coach-v${{ env.VERSION }}
           path: Spa-Coach-v${{ env.VERSION }}.apk
 
-
