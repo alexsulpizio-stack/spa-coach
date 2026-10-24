@@ -72,8 +72,9 @@ function writeSavedState(state) {
 }
 
 function activeProfileContext(state) {
-  const id = state.activeProfileId;
+  const id = state.activeProfileId || state.profiles?.[0]?.id || 'spa-default';
   if (!id) return null;
+  state.activeProfileId = id;
   state.profileData = state.profileData && typeof state.profileData === 'object' ? state.profileData : {};
   const context = state.profileData[id] && typeof state.profileData[id] === 'object'
     ? state.profileData[id]

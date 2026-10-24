@@ -64,6 +64,17 @@ test('maintenance settings schedule native reminders',async({page})=>{
   expect(keys).toContain('filter');
 });
 
+test('floater check is saved and shown in maintenance history',async({page})=>{
+  await finishOnboarding(page);
+  await page.locator('#logFloaterCheckBtn').click();
+  await page.getByRole('button',{name:'View all'}).click();
+  await expect(page.locator('#historyList')).toContainText('Chlorine floater checked');
+  const saved=await page.evaluate(()=>JSON.parse(localStorage.getItem('spaCoachState')));
+  expect(saved.lastFloaterCheck).toBeTruthy();
+  expect(saved.profileData[saved.activeProfileId].lastFloaterCheck).toBe(saved.lastFloaterCheck);
+  expect(saved.profileData[saved.activeProfileId].history[0].type).toBe('floater-check');
+});
+
 test('idle app does not reschedule and water-test logging syncs immediately',async({page})=>{
   await page.clock.install();
   await page.addInitScript(()=>{
