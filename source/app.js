@@ -1038,6 +1038,7 @@ const { buildBackupPayload, restoreFullBackup } = globalThis.SpaBackup;
       if (h.type==='filter-rinse') return `<div class="history-entry"><div class="history-entry-title">Filter rinsed</div><div class="history-entry-meta">${formatDateTime(h.at)}</div></div>`;
       if (h.type==='drain-refill') return `<div class="history-entry"><div class="history-entry-title">Spa drained and refilled</div><div class="history-entry-meta">${formatDateTime(h.at)}</div></div>`;
       if (h.type==='filter-replacement') return `<div class="history-entry"><div class="history-entry-title">Filter replaced</div><div class="history-entry-meta">${formatDateTime(h.at)}</div></div>`;
+      if (h.type==='floater-check') return `<div class="history-entry"><div class="history-entry-title">Chlorine floater checked</div><div class="history-entry-meta">${formatDateTime(h.at)}</div></div>`;
       if (h.type==='pool-closing') return `<div class="history-entry"><div class="history-entry-title">Pool closed for the season</div><div class="history-entry-meta">${formatDateTime(h.at)}</div></div>`;
       const r=h.readings||{};
       const d=h.scanDetails||{};
