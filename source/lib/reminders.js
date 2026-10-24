@@ -71,6 +71,37 @@ function writeSavedState(state) {
   catch (_) { return false; }
 }
 
+function activeProfileContext(state) {
+  const id = state.activeProfileId;
+  if (!id) return null;
+  state.profileData = state.profileData && typeof state.profileData === 'object' ? state.profileData : {};
+  const context = state.profileData[id] && typeof state.profileData[id] === 'object'
+    ? state.profileData[id]
+    : {};
+  context.history = Array.isArray(context.history) ? context.history : [];
+  state.profileData[id] = context;
+  return context;
+}
+
+function contextHistory(state) {
+  return activeProfileContext(state)?.history || [];
+}
+
+function persistMaintenanceField(state, key, value) {
+  state[key] = value;
+  const context = activeProfileContext(state);
+  if (context) context[key] = value;
+}
+
+function persistMaintenanceHistory(state, history) {
+  state.history = history;
+  const context = activeProfileContext(state);
+  if (context) context.history = history.map(entry => ({
+    ...entry,
+    profileId: entry.profileId || state.activeProfileId
+  }));
+}
+
 function latestHistoryAt(history, type) {
   if (!Array.isArray(history)) return null;
   let latest = null;
@@ -126,7 +157,9 @@ function syncFloaterReminder(now = Date.now()) {
       bridge.cancelReminder(FLOATER_REMINDER_KEY);
       return;
     }
-    const lastCheck = state.lastFloaterCheck || latestHistoryAt(state.history, 'floater-check');
+    const history = contextHistory(state);
+    const lastCheck = (activeProfileContext(state)?.lastFloaterCheck || state.lastFloaterCheck)
+      || latestHistoryAt(history, 'floater-check') || latestHistoryAt(state.history, 'floater-check');
     const dueAt = reminderDueAt(FLOATER_REMINDER_KEY, lastCheck, config.days, now);
     bridge.scheduleReminder(
       FLOATER_REMINDER_KEY,
@@ -141,15 +174,30 @@ function syncFloaterReminder(now = Date.now()) {
 
 function recoverMaintenanceDatesFromHistory() {
   const state = readSavedState();
+  const context = activeProfileContext(state);
+  const history = context?.history?.length ? context.history : state.history;
   let changed = false;
   MAINTENANCE_FIELDS.forEach(field => {
-    if (state[field.key]) return;
-    const recovered = latestHistoryAt(state.history, field.historyType);
-    if (recovered) { state[field.key] = recovered; changed = true; }
+    const existing = context?.[field.key] || state[field.key];
+    if (existing) {
+      if (state[field.key] !== existing || context?.[field.key] !== existing) {
+        persistMaintenanceField(state, field.key, existing);
+        changed = true;
+      }
+      return;
+    }
+    const recovered = latestHistoryAt(history, field.historyType);
+    if (recovered) { persistMaintenanceField(state, field.key, recovered); changed = true; }
   });
-  if (!state.lastFloaterCheck) {
-    const recoveredFloater = latestHistoryAt(state.history, 'floater-check');
-    if (recoveredFloater) { state.lastFloaterCheck = recoveredFloater; changed = true; }
+  const existingFloater = context?.lastFloaterCheck || state.lastFloaterCheck;
+  if (existingFloater) {
+    if (state.lastFloaterCheck !== existingFloater || context?.lastFloaterCheck !== existingFloater) {
+      persistMaintenanceField(state, 'lastFloaterCheck', existingFloater);
+      changed = true;
+    }
+  } else {
+    const recoveredFloater = latestHistoryAt(history, 'floater-check');
+    if (recoveredFloater) { persistMaintenanceField(state, 'lastFloaterCheck', recoveredFloater); changed = true; }
   }
   if (changed) writeSavedState(state);
   return state;
@@ -182,13 +230,21 @@ function maintenanceDateFieldsHtml(prefix='') {
 
 function applyMaintenanceDateInputs(prefix='', completeOnboarding=false) {
   const state = readSavedState();
+  const context = activeProfileContext(state);
+  const history = [...(context?.history?.length ? context.history : (state.history || []))];
   MAINTENANCE_FIELDS.forEach(field => {
     const el = document.getElementById(`${prefix}${field.input}`);
     if (!el) return;
     const iso = localDateToIso(el.value);
-    if (iso) state[field.key] = iso;
-    else if (!state[field.key]) state[field.key] = null;
+    if (iso) {
+      if (state[field.key] !== iso || context?.[field.key] !== iso) {
+        persistMaintenanceField(state, field.key, iso);
+        history.unshift({ id:`${field.historyType}-${Date.now()}`, at:iso, type:field.historyType, profileId:state.activeProfileId });
+      }
+    } else if (!state[field.key]) persistMaintenanceField(state, field.key, null);
   });
+  history.splice(200);
+  persistMaintenanceHistory(state, history);
   if (completeOnboarding) state.onboardingComplete = true;
   state.maintenanceDatesSetupComplete = MAINTENANCE_FIELDS.every(field => Boolean(state[field.key]));
   return writeSavedState(state);
@@ -225,9 +281,10 @@ function saveFloaterReminderSettings() {
 function logFloaterCheck() {
   const state = readSavedState();
   const at = new Date().toISOString();
-  state.lastFloaterCheck = at;
-  state.history = Array.isArray(state.history) ? state.history : [];
-  state.history.unshift({ id:`floater-${Date.now()}`, at, type:'floater-check' });
+  persistMaintenanceField(state, 'lastFloaterCheck', at);
+  const history = [...(contextHistory(state).length ? contextHistory(state) : (state.history || []))];
+  history.unshift({ id:`floater-${Date.now()}`, at, type:'floater-check', profileId:state.activeProfileId });
+  persistMaintenanceHistory(state, history.slice(0, 200));
   if (state.history.length > 200) state.history = state.history.slice(0, 200);
   if (!writeSavedState(state)) return false;
   syncFloaterReminder();
@@ -323,6 +380,7 @@ globalThis.SpaReminders = Object.freeze({
   maintenanceDueAt,
   reminderDueAt,
   recoverMaintenanceDatesFromHistory,
+  applyMaintenanceDateInputs,
   syncWaterTestReminder,
   waterTestReminderConfig,
   syncFloaterReminder,

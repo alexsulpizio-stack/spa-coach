@@ -86,6 +86,22 @@ test('legacy history is recovered from old profile buckets',()=>{
   assert.equal(migrated.profileData.pool.history.length,0);
 });
 
+test('legacy active-profile maintenance dates migrate into profile context',()=>{
+  const migrated=migrateState({
+    activeProfileId:'spa',
+    profiles:[{id:'spa',name:'Spa'}],
+    profileData:{spa:{history:[]}},
+    lastFilterRinse:'2026-08-20T12:00:00.000Z',
+    lastDrainRefill:'2026-08-21T12:00:00.000Z',
+    lastFilterReplacement:'2026-08-22T12:00:00.000Z',
+    lastFloaterCheck:'2026-08-23T12:00:00.000Z'
+  });
+  assert.equal(migrated.profileData.spa.lastFilterRinse, migrated.lastFilterRinse);
+  assert.equal(migrated.profileData.spa.lastDrainRefill, migrated.lastDrainRefill);
+  assert.equal(migrated.profileData.spa.lastFilterReplacement, migrated.lastFilterReplacement);
+  assert.equal(migrated.profileData.spa.lastFloaterCheck, migrated.lastFloaterCheck);
+});
+
 test('legacy duplicate profiles gain a pool option during migration',()=>{
   const migrated=migrateState({
     profile:{name:'My PureSpa',bodyOfWater:'spa',volume:290},
@@ -126,4 +142,3 @@ test('current follow-up remains attached to the latest logged test',()=>{
   });
   assert.deepEqual(migrated.pendingFollowUp,followUp);
 });
-
